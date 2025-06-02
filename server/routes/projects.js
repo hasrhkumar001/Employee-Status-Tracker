@@ -77,6 +77,25 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// @route   GET /api/projects/managed
+// @desc    Get all projects managed by the logged-in user
+// @access  Private (Manager)
+router.get('/managed', auth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // Find projects where this user is a manager
+    const managedProjects = await Project.find({ managers: userId })
+      .populate('teams') // optional: include teams
+      .lean();
+
+    res.json(managedProjects);
+  } catch (error) {
+    console.error('Error fetching managed projects:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // @route   GET /api/projects/:id
 // @desc    Get project by ID
 // @access  Private (Admin, Project Manager, Team Member)

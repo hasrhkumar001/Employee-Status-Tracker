@@ -1,53 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, X, Plus } from 'lucide-react';
+import Select from 'react-select';
 
-interface Project {
-  _id: string;
-  name: string;
-}
-
-interface User {
-  _id: string;
-  name: string;
-  email: string;
-}
-
-interface Question {
-  _id?: string;
-  text: string;
-  isCommon: boolean;
-}
-
-interface Team {
-  _id: string;
-  name: string;
-  description: string;
-  project: {
-    _id: string;
-    name: string;
-  };
-  members: User[];
-  questions: Question[];
-  active: boolean;
-}
-
-const EditTeam: React.FC = () => {
+const EditTeam = () => {
   const navigate = useNavigate();
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams();
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [team, setTeam] = useState<Team | null>(null);
+  const [error, setError] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [team, setTeam] = useState(null);
   
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     project: '',
-    members: [] as string[],
-    questions: [] as Question[],
+    members: [],
+    questions: [],
     active: true
   });
 
@@ -83,25 +54,24 @@ const EditTeam: React.FC = () => {
 
       setTeam(teamData);
       setProjects(projectsData);
-      setUsers(usersData);
+      setUsers(usersData.filter(user => user._id && user.role === 'employee'));
 
-      // Set form data
       setFormData({
         name: teamData.name,
         description: teamData.description || '',
         project: teamData.project._id,
-        members: teamData.members.map((member: User) => member._id),
+        members: teamData.members.map(member => member._id),
         questions: teamData.questions || [],
         active: teamData.active
       });
-    } catch (err: any) {
+    } catch (err) {
       setError(err.message || 'Failed to load data');
     } finally {
       setLoadingData(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!id) return;
 
@@ -124,7 +94,7 @@ const EditTeam: React.FC = () => {
       }
 
       navigate('/admin/teams');
-    } catch (err: any) {
+    } catch (err) {
       setError(err.message || 'Failed to update team');
     } finally {
       setLoading(false);
@@ -138,30 +108,25 @@ const EditTeam: React.FC = () => {
     });
   };
 
-  const removeQuestion = (index: number) => {
+  const removeQuestion = (index) => {
     const newQuestions = formData.questions.filter((_, i) => i !== index);
     setFormData({ ...formData, questions: newQuestions });
   };
 
-  const updateQuestion = (index: number, text: string) => {
+  const updateQuestion = (index, text) => {
     const newQuestions = [...formData.questions];
     newQuestions[index] = { ...newQuestions[index], text };
     setFormData({ ...formData, questions: newQuestions });
   };
 
-  const toggleMember = (userId: string) => {
-    const isSelected = formData.members.includes(userId);
-    if (isSelected) {
-      setFormData({
-        ...formData,
-        members: formData.members.filter(id => id !== userId)
-      });
-    } else {
-      setFormData({
-        ...formData,
-        members: [...formData.members, userId]
-      });
-    }
+  const memberOptions = users.map(user => ({
+    value: user._id,
+    label: `${user.name} (${user.email})`
+  }));
+
+  const handleMemberChange = (selectedOptions) => {
+    const selectedMemberIds = selectedOptions ? selectedOptions.map(option => option.value) : [];
+    setFormData({ ...formData, members: selectedMemberIds });
   };
 
   if (loadingData) {
@@ -270,23 +235,20 @@ const EditTeam: React.FC = () => {
 
         <div className="bg-white shadow-sm rounded-lg p-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Team Members</h2>
-          
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {users.map(user => (
-              <div key={user._id} className="flex items-center">
-                <input
-                  id={`member-${user._id}`}
-                  type="checkbox"
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  checked={formData.members.includes(user._id)}
-                  onChange={() => toggleMember(user._id)}
-                />
-                <label htmlFor={`member-${user._id}`} className="ml-2 block text-sm text-gray-900">
-                  <div className="font-medium">{user.name}</div>
-                  <div className="text-gray-500 text-xs">{user.email}</div>
-                </label>
-              </div>
-            ))}
+          <div>
+            <label htmlFor="members" className="block text-sm font-medium text-gray-700">
+              Select Team Members (Employees) *
+            </label>
+            <Select
+              id="members"
+              isMulti
+              options={memberOptions}
+              value={memberOptions.filter(option => formData.members.includes(option.value))}
+              onChange={handleMemberChange}
+              placeholder="Select team members..."
+              className="mt-1"
+              classNamePrefix="react-select"
+            />
           </div>
         </div>
 

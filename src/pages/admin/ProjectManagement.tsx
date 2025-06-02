@@ -294,13 +294,13 @@ const ProjectManagement: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
-                        <Link
+                        {/* <Link
                           to={`/admin/projects/${project._id}/teams`}
                           className="text-purple-600 hover:text-purple-900 p-1 rounded transition-colors"
                           title="Manage Teams"
                         >
                           <Users size={18} />
-                        </Link>
+                        </Link> */}
                         <Link
                           to={`/admin/projects/${project._id}/edit`}
                           className="text-blue-600 hover:text-blue-900 p-1 rounded transition-colors"

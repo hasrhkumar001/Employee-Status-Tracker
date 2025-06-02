@@ -222,13 +222,13 @@ const TeamManagement: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
-                        <Link
+                        {/* <Link
                            to={`/manager/members/${team._id}`}
                           className="text-purple-600 hover:text-purple-900"
                           title="Manage Members"
                         >
                           <Users size={18} />
-                        </Link>
+                        </Link> */}
                         <Link
                           to={`/admin/teams/${team._id}/edit`}
                           className="text-blue-600 hover:text-blue-900"

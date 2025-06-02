@@ -107,7 +107,7 @@ const TeamStatus: React.FC = () => {
         endDate: endOfMonth.toISOString().split('T')[0],
       });
 
-      const response = await axios.get('/api/status/export/excel', {
+      const response = await axios.get('/api/reports/excel', {
         headers: {
           Authorization: `Bearer ${token}`,
         },

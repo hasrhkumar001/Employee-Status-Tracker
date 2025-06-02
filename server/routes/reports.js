@@ -12,349 +12,337 @@ const router = express.Router();
 router.get('/excel', auth, isManager, async (req, res) => {
   try {
     const { team, teams, user, users, startDate, endDate, month, year } = req.query;
-    
-    // Handle both single and multiple team/user parameters
+
     let teamIds = [];
     let userIds = [];
-    
-    // Process team parameters
+
     if (teams) {
-      // Handle comma-separated teams
-      teamIds = teams.split(',').map(id => id.trim()).filter(id => id);
+      teamIds = teams.split(',').map((id) => id.trim());
     } else if (team) {
-      // Handle single team
       teamIds = [team];
     }
-    
-    // Process user parameters
+
     if (users) {
-      // Handle comma-separated users
-      userIds = users.split(',').map(id => id.trim()).filter(id => id);
+      userIds = users.split(',').map((id) => id.trim());
     } else if (user) {
-      // Handle single user
       userIds = [user];
     }
-    
-    // Validate input - require either teams or users
-    if (teamIds.length === 0 && userIds.length === 0) {
-      return res.status(400).json({ 
-        message: 'Either team/teams or user/users is required'
-      });
-    }
-    
-    // Build date filter
+
     let dateFilter = {};
-    
     if (startDate && endDate) {
       dateFilter = {
         $gte: new Date(startDate),
-        $lte: new Date(endDate)
+        $lte: new Date(endDate),
       };
     } else if (month && year) {
       const startMonthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const endMonthDate = new Date(parseInt(year), parseInt(month), 0);
-      
-      dateFilter = {
-        $gte: startMonthDate,
-        $lte: endMonthDate
-      };
+      const endMonthDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
+      dateFilter = { $gte: startMonthDate, $lte: endMonthDate };
     } else {
-      // Default to current month if no date filter provided
       const today = new Date();
       const startMonthDate = new Date(today.getFullYear(), today.getMonth(), 1);
-      const endMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      
-      dateFilter = {
-        $gte: startMonthDate,
-        $lte: endMonthDate
-      };
+      const endMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+      dateFilter = { $gte: startMonthDate, $lte: endMonthDate };
     }
-    
-    // Check permissions
+
     let accessibleTeamIds = [];
-    
+
     if (req.user.role === 'admin') {
-      // Admin can access all teams
       if (teamIds.length > 0) {
         accessibleTeamIds = teamIds;
       } else {
         const allTeams = await Team.find();
-        accessibleTeamIds = allTeams.map(team => team._id.toString());
+        accessibleTeamIds = allTeams.map((t) => t._id.toString());
       }
     } else if (req.user.role === 'manager') {
-      // Manager can access teams from their projects
-      const managedProjects = await Project.find({ managers: req.user._id });
-      const projectIds = managedProjects.map(project => project._id);
-      
-      let accessibleTeams;
+      const userProjects = req.user.projects || [];
+      let queryTeams = [];
+
       if (teamIds.length > 0) {
-        accessibleTeams = await Team.find({
-          _id: { $in: teamIds },
-          project: { $in: projectIds }
-        });
+        queryTeams = await Team.find({ _id: { $in: teamIds } }).populate('project');
+        const authorizedTeams = queryTeams.filter((team) =>
+          userProjects.some((pid) => pid.toString() === team.project._id.toString())
+        );
+
+        if (authorizedTeams.length === 0) {
+          return res.status(403).json({ message: 'Not authorized to access the requested teams' });
+        }
+
+        accessibleTeamIds = authorizedTeams.map((team) => team._id.toString());
       } else {
-        accessibleTeams = await Team.find({
-          project: { $in: projectIds }
-        });
-      }
-      
-      accessibleTeamIds = accessibleTeams.map(team => team._id.toString());
-      
-      if (teamIds.length > 0 && accessibleTeamIds.length === 0) {
-        return res.status(403).json({
-          message: 'You do not have permission to access the requested teams'
-        });
+        const teams = await Team.find({ project: { $in: userProjects } });
+        accessibleTeamIds = teams.map((team) => team._id.toString());
       }
     } else {
-      // Employees can access only their teams
-      return res.status(403).json({
-        message: 'Only managers and admins can generate reports'
-      });
+      return res.status(403).json({ message: 'Only managers and admins can generate reports' });
     }
-    
-    if (accessibleTeamIds.length === 0 && userIds.length === 0) {
+
+    let accessibleUserIds = [];
+    if (userIds.length > 0) {
+      const usersInTeams = await User.find({
+        _id: { $in: userIds },
+        teams: { $in: accessibleTeamIds },
+      }).lean();
+      accessibleUserIds = usersInTeams.map((user) => user._id.toString());
+      if (accessibleUserIds.length === 0) {
+        return res.status(404).json({ message: 'No valid users found for the selected teams' });
+      }
+    } else if (teamIds.length > 0) {
+      const usersInTeams = await User.find({ teams: { $in: accessibleTeamIds } }).lean();
+      accessibleUserIds = usersInTeams.map((user) => user._id.toString());
+    } else {
+      const usersInTeams = await User.find({ teams: { $in: accessibleTeamIds } }).lean();
+      accessibleUserIds = usersInTeams.map((user) => user._id.toString());
+    }
+
+    if (accessibleTeamIds.length === 0 && accessibleUserIds.length === 0) {
       return res.status(404).json({ message: 'No accessible teams or users found' });
     }
-    
-    // Build query
+
     const query = {
-      date: dateFilter
+      date: dateFilter,
+      team: { $in: accessibleTeamIds },
     };
-    
-    // Add user filter if specified
-    if (userIds.length > 0) {
-      query.user = { $in: userIds };
+
+    if (accessibleUserIds.length > 0) {
+      query.user = { $in: accessibleUserIds };
     }
-    
-    // Add team filter if we have accessible teams
-    if (accessibleTeamIds.length > 0) {
-      query.team = { $in: accessibleTeamIds };
-    }
-    
-    console.log('Query built:', JSON.stringify(query, null, 2)); // Debug log
-    
-    // Get all dates in the range
-    const startDate1 = new Date(dateFilter.$gte);
-    const endDate1 = new Date(dateFilter.$lte);
-    const allDates = [];
-    
-    for (let d = new Date(startDate1); d <= endDate1; d.setDate(d.getDate() + 1)) {
-      allDates.push(new Date(d));
-    }
-    
-    // Get status updates with proper population
+
     const statusUpdates = await StatusUpdate.find(query)
+      .sort({ date: 1 })
       .populate('user', 'name')
       .populate('team', 'name')
       .populate('responses.question', 'text isCommon')
-      .lean(); // Use lean for better performance
-    
-    console.log(`Found ${statusUpdates.length} status updates`); // Debug log
-    
-    // Determine which teams to include in the report
-    let reportTeamIds = accessibleTeamIds;
-    if (userIds.length > 0 && teamIds.length === 0) {
-      // If only users are specified, get their teams from the status updates
-      const userTeamIds = [...new Set(statusUpdates.map(update => update.team._id.toString()))];
-      reportTeamIds = userTeamIds.filter(teamId => accessibleTeamIds.includes(teamId));
+      .lean();
+
+    const allDates = [];
+    const start = new Date(dateFilter.$gte);
+    const end = new Date(dateFilter.$lte);
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      allDates.push(new Date(d));
     }
-    
-    // Get all questions (common and team-specific)
+
     const allQuestions = await Question.find({
-      $or: [
-        { isCommon: true },
-        { teams: { $in: reportTeamIds } }
-      ]
+      $or: [{ isCommon: true }, { teams: { $in: accessibleTeamIds } }],
     }).lean();
-    
-    // Get team and user data
-    const reportTeams = await Team.find({ _id: { $in: reportTeamIds } }).lean();
-    
-    // Get users - either specified users or all users from the teams
-    let reportUsers;
-    if (userIds.length > 0) {
-      reportUsers = await User.find({ 
-        _id: { $in: userIds },
-        teams: { $in: reportTeamIds }
-      }).lean();
-    } else {
-      reportUsers = await User.find({ 
-        teams: { $in: reportTeamIds } 
-      }).lean();
-    }
-    
-    console.log(`Processing ${reportTeams.length} teams and ${reportUsers.length} users`); // Debug log
-    
-    // Create Excel workbook
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Status Tracker';
-    workbook.created = new Date();
-    workbook.modified = new Date();
-    
-    // Add worksheet
-    const worksheet = workbook.addWorksheet('Status Report');
-    
-    // Prepare headers
-    const headers = ['Team #', 'Resource Names', 'Questions'];
-    allDates.forEach(date => {
-      const formattedDate = date.toISOString().split('T')[0]; // YYYY-MM-DD
-      headers.push(formattedDate);
-    });
-    
-    // Add headers
-    worksheet.addRow(headers);
-    
-    // Style headers
-    const headerRow = worksheet.getRow(1);
-    headerRow.font = { bold: true };
-    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
-    
-    // Set column widths
-    worksheet.getColumn(1).width = 15; // Team #
-    worksheet.getColumn(2).width = 20; // Resource Names
-    worksheet.getColumn(3).width = 30; // Questions
-    
-    // Set date column widths
-    for (let i = 4; i <= headers.length; i++) {
-      worksheet.getColumn(i).width = 25;
-    }
-    
-    // Group status updates by team, user, and date for easy lookup
+
+    const reportTeams = await Team.find({ _id: { $in: accessibleTeamIds } }).lean();
+    const reportUsers = await User.find({
+      _id: { $in: accessibleUserIds },
+    }).lean();
+
+    const validTeams = reportTeams.filter((team) => team && team._id);
+    const validUsers = reportUsers.filter((user) => user && user._id);
+
     const updatesByTeamUserDate = {};
-    
-    statusUpdates.forEach(update => {
+    statusUpdates.forEach((update) => {
+      if (!update.team || !update.user || !update.team._id || !update.user._id) {
+        console.warn('Skipping update with missing team or user data:', update);
+        return;
+      }
+
       const teamId = update.team._id.toString();
       const userId = update.user._id.toString();
       const dateStr = update.date.toISOString().split('T')[0];
-      
-      if (!updatesByTeamUserDate[teamId]) {
-        updatesByTeamUserDate[teamId] = {};
-      }
-      
-      if (!updatesByTeamUserDate[teamId][userId]) {
-        updatesByTeamUserDate[teamId][userId] = {};
-      }
-      
-      updatesByTeamUserDate[teamId][userId][dateStr] = update.responses;
+
+      if (!updatesByTeamUserDate[teamId]) updatesByTeamUserDate[teamId] = {};
+      if (!updatesByTeamUserDate[teamId][userId]) updatesByTeamUserDate[teamId][userId] = {};
+      updatesByTeamUserDate[teamId][userId][dateStr] = update.isLeave
+        ? { leaveReason: update.leaveReason || 'Leave' }
+        : update.responses;
     });
-    
-    // Add data rows
-    let rowIndex = 2;
-    
-    // Process each team
-    reportTeams.forEach((team, teamIndex) => {
-      const teamId = team._id.toString();
-      const teamName = team.name;
-      
-      // Get users for this team (filtered by reportUsers if specific users were requested)
-      const usersInTeam = reportUsers.filter(user => 
-        user.teams && user.teams.some(t => t.toString() === teamId)
-      );
-      
-      if (usersInTeam.length === 0) {
-        return; // Skip if no users in team
-      }
-      
-      // Get questions for this team (common + team-specific)
-      const teamQuestions = allQuestions.filter(question => 
-        question.isCommon || 
-        (question.teams && question.teams.some(t => t.toString() === teamId))
-      );
-      
-      let isFirstRowForTeam = true;
-      
-      // Process each user in the team
-      usersInTeam.forEach((user, userIndex) => {
-        const userId = user._id.toString();
-        
-        // Process each question for this user
-        teamQuestions.forEach((question, questionIndex) => {
-          const row = [];
-          
-          // Column A: Team # (only for first row of team)
-          if (isFirstRowForTeam && userIndex === 0 && questionIndex === 0) {
-            row.push(teamName);
-            isFirstRowForTeam = false;
-          } else {
-            row.push('');
-          }
-          
-          // Column B: Resource Names (only for first question of each user)
-          if (questionIndex === 0) {
-            row.push(user.name);
-          } else {
-            row.push('');
-          }
-          
-          // Column C: Questions
-          row.push(question.text);
-          
-          // Columns D onward: Date-wise entries
-          allDates.forEach(date => {
-            const dateStr = date.toISOString().split('T')[0];
-            const userUpdates = updatesByTeamUserDate[teamId]?.[userId]?.[dateStr] || [];
-            
-            // Find the response for this question
-            const response = userUpdates.find(r => 
-              r.question && r.question._id && 
-              r.question._id.toString() === question._id.toString()
-            );
-            
-            row.push(response ? response.answer : '');
-          });
-          
-          worksheet.addRow(row);
-          rowIndex++;
-        });
-      });
-      
-      // Add empty row between teams (except for last team)
-      if (teamIndex < reportTeams.length - 1) {
-        worksheet.addRow([]);
-        rowIndex++;
-      }
-    });
-    
-    // Format all cells
-    worksheet.eachRow((row, rowNumber) => {
-      row.eachCell((cell, colNumber) => {
-        cell.alignment = {
-          vertical: 'top',
-          wrapText: true
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Status Report');
+
+    const headers = ['Team', 'User', 'Question'];
+    allDates.forEach((date) => headers.push(date.toISOString().split('T')[0]));
+    worksheet.columns = headers.map((header, i) => ({
+      header,
+      key: header,
+      width: i < 3 ? 20 : 15,
+    }));
+
+    const isWeekend = (date) => {
+      const day = date.getDay();
+      return day === 0 || day === 6; // Sunday or Saturday
+    };
+
+    const applyCellColor = (cell, value, date) => {
+      const lowerValue = (value || '').toString().toLowerCase().trim();
+      if (isWeekend(date)) {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFD3D3D3' },
         };
-        
-        // Bold formatting for Team, Resource Names, and Questions columns
-        if (colNumber <= 3) {
-          cell.font = { bold: true };
+      }
+      if (lowerValue === 'red') {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: isWeekend(date) ? 'FFD3D3D3' : 'FFFF6B6B' },
+        };
+      } else if (lowerValue === 'green') {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: isWeekend(date) ? 'FFD3D3D3' : 'FF51CF66' },
+        };
+      } else if (lowerValue === 'amber') {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: isWeekend(date) ? 'FFD3D3D3' : 'FFFFD43B' },
+        };
+      }
+    };
+
+    const getUserLeaveDates = (teamId, userId) => {
+      const leaveDates = {};
+      allDates.forEach((date) => {
+        const dateStr = date.toISOString().split('T')[0];
+        const dayData = updatesByTeamUserDate[teamId]?.[userId]?.[dateStr];
+        if (dayData?.leaveReason) {
+          leaveDates[dateStr] = dayData.leaveReason;
         }
-        
-        // Add borders
+      });
+      return leaveDates;
+    };
+
+    for (const team of validTeams) {
+      if (!team || !team._id) {
+        console.warn('Skipping team with missing data:', team);
+        continue;
+      }
+
+      const teamId = team._id.toString();
+      const usersInTeam = validUsers.filter((u) =>
+        u && u._id && u.teams && u.teams.some((tid) => tid && tid.toString() === teamId)
+      );
+
+      let isFirstUserInTeam = true;
+
+      for (const user of usersInTeam) {
+        if (!user || !user._id) {
+          console.warn('Skipping user with missing data:', user);
+          continue;
+        }
+
+        const userId = user._id.toString();
+        const questions = allQuestions.filter((q) =>
+          q && q._id && (q.isCommon || (q.teams && q.teams.some((tid) => tid && tid.toString() === teamId)))
+        );
+
+        const userLeaveDates = getUserLeaveDates(teamId, userId);
+        const hasLeave = Object.keys(userLeaveDates).length > 0;
+
+        let isFirstRowForUser = true;
+        const userStartRowNumber = worksheet.rowCount + 1;
+        let questionRowsAdded = 0;
+
+        questions.forEach((question, qIndex) => {
+          const row = {
+            Team: isFirstUserInTeam ? team.name : '',
+            User: isFirstRowForUser ? user.name : '',
+            Question: question.text,
+          };
+
+          allDates.forEach((date) => {
+            const dateStr = date.toISOString().split('T')[0];
+            const dayData = updatesByTeamUserDate[teamId]?.[userId]?.[dateStr];
+
+            if (dayData?.leaveReason) {
+              row[dateStr] = qIndex === 0 ? dayData.leaveReason : '';
+            } else {
+              const response = Array.isArray(dayData)
+                ? dayData.find(
+                    (r) => r && r.question && r.question._id && r.question._id.toString() === question._id.toString()
+                  )
+                : null;
+              row[dateStr] = response?.answer || '';
+            }
+          });
+
+          const addedRow = worksheet.addRow(row);
+          questionRowsAdded++;
+
+          allDates.forEach((date, dateIndex) => {
+            const dateStr = date.toISOString().split('T')[0];
+            const cell = addedRow.getCell(headers.indexOf(dateStr) + 1);
+
+            if (userLeaveDates[dateStr]) {
+              cell.font = { color: { argb: 'FFFF0000' }, bold: true };
+              cell.alignment = { vertical: 'middle', horizontal: 'center' };
+              cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: isWeekend(date) ? 'FFD3D3D3' : 'FFFFE6E6' },
+              };
+            } else {
+              applyCellColor(cell, cell.value, date);
+            }
+          });
+
+          isFirstUserInTeam = false;
+          isFirstRowForUser = false;
+        });
+
+        if (hasLeave && questionRowsAdded > 1) {
+          allDates.forEach((date, dateIndex) => {
+            const dateStr = date.toISOString().split('T')[0];
+            if (userLeaveDates[dateStr]) {
+              const colIndex = 4 + dateIndex;
+              const startRow = userStartRowNumber;
+              const endRow = userStartRowNumber + questionRowsAdded - 1;
+
+              try {
+                worksheet.mergeCells(startRow, colIndex, endRow, colIndex);
+                const mergedCell = worksheet.getCell(startRow, colIndex);
+                mergedCell.value = userLeaveDates[dateStr];
+                mergedCell.font = { color: { argb: 'FFFF0000' }, bold: true };
+                mergedCell.alignment = { vertical: 'middle', horizontal: 'center' };
+                mergedCell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: isWeekend(date) ? 'FFD3D3D3' : 'FFFFE6E6' },
+                };
+              } catch (error) {
+                console.warn(`Error merging cells for leave date ${dateStr}:`, error);
+              }
+            }
+          });
+        }
+
+        worksheet.addRow([]);
+      }
+    }
+
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    worksheet.eachRow((row) => {
+      row.eachCell((cell) => {
         cell.border = {
           top: { style: 'thin' },
           left: { style: 'thin' },
           bottom: { style: 'thin' },
-          right: { style: 'thin' }
+          right: { style: 'thin' },
         };
       });
     });
-    
-    // Generate Excel file
+
     const buffer = await workbook.xlsx.writeBuffer();
-    
-    // Set response headers
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=status-report.xlsx');
     res.setHeader('Content-Length', buffer.length);
-    
-    // Send file
     res.send(buffer);
-    
   } catch (error) {
-    console.error('Generate Excel report error:', error);
-    res.status(500).json({ 
-      message: 'Server error', 
+    console.error('Excel export error:', error);
+    res.status(500).json({
+      message: 'Server error',
       error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 });

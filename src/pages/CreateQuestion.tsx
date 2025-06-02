@@ -1,26 +1,36 @@
 import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save } from 'lucide-react';
 
 interface Team {
   _id: string;
   name: string;
 }
 
+interface Option {
+  text: string;
+  order: number;
+}
+
 const CreateQuestion: React.FC = () => {
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [formData, setFormData] = useState({
     text: '',
+    type: 'text' as 'text' | 'multiple_choice' | 'single_choice',
+    options: [] as Option[],
     isCommon: true,
     teams: [] as string[],
     order: 0,
     active: true
   });
 
-  useEffect(() => {
+  const navigate = useNavigate();
+
+ 
+
+    useEffect(() => {
     const fetchTeams = async () => {
       try {
         const response = await fetch('/api/teams', {
@@ -45,6 +55,12 @@ const CreateQuestion: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+     if ((formData.type === 'multiple_choice' || formData.type === 'single_choice') && 
+        formData.options.length === 0) {
+      setError('Choice questions must have at least one option');
+      setLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch('/api/questions', {
@@ -81,12 +97,54 @@ const CreateQuestion: React.FC = () => {
     }));
   };
 
+  const handleTypeChange = (type: 'text' | 'multiple_choice' | 'single_choice') => {
+    setFormData(prev => ({
+      ...prev,
+      type,
+      options: type === 'text' ? [] : prev.options.length === 0 ? [{ text: '', order: 0 }] : prev.options
+    }));
+  };
+
+  const addOption = () => {
+    setFormData(prev => ({
+      ...prev,
+      options: [...prev.options, { text: '', order: prev.options.length }]
+    }));
+  };
+
+  const removeOption = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      options: prev.options.filter((_, i) => i !== index).map((option, i) => ({
+        ...option,
+        order: i
+      }))
+    }));
+  };
+
+  const updateOption = (index: number, text: string) => {
+    setFormData(prev => ({
+      ...prev,
+      options: prev.options.map((option, i) => 
+        i === index ? { ...option, text } : option
+      )
+    }));
+  };
+
+  const handleBack = () => {
+    console.log('Navigate back to questions list');
+  };
+
+  const handleCancel = () => {
+    console.log('Cancel and navigate back');
+  };
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6 p-4">
       <div className="flex items-center space-x-4">
         <button
-          onClick={() => navigate('/admin/questions')}
-          className="inline-flex items-center text-gray-600 hover:text-gray-800"
+          onClick={handleBack}
+          className="inline-flex items-center text-gray-600 hover:text-gray-800 transition-colors"
         >
           <ArrowLeft size={20} className="mr-2" />
           Back to Questions
@@ -95,13 +153,13 @@ const CreateQuestion: React.FC = () => {
       </div>
 
       {error && (
-        <div className="bg-red-50 p-4 rounded-md">
+        <div className="bg-red-50 border border-red-200 p-4 rounded-md">
           <p className="text-red-700">{error}</p>
         </div>
       )}
 
-      <div className="bg-white shadow-sm rounded-lg p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="bg-white shadow-sm rounded-lg p-6 border">
+        <div className="space-y-6">
           <div>
             <label htmlFor="text" className="block text-sm font-medium text-gray-700 mb-2">
               Question Text *
@@ -111,7 +169,7 @@ const CreateQuestion: React.FC = () => {
               rows={3}
               value={formData.text}
               onChange={(e) => setFormData(prev => ({ ...prev, text: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Enter your question..."
               required
             />
@@ -122,7 +180,95 @@ const CreateQuestion: React.FC = () => {
               Question Type *
             </label>
             <div className="space-y-2">
-              <label className="flex items-center">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="questionType"
+                  checked={formData.type === 'text'}
+                  onChange={() => handleTypeChange('text')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                />
+                <span className="ml-2 text-sm text-gray-700">
+                  Text Answer
+                </span>
+              </label>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="questionType"
+                  checked={formData.type === 'single_choice'}
+                  onChange={() => handleTypeChange('single_choice')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                />
+                <span className="ml-2 text-sm text-gray-700">
+                  Single Choice (radio buttons)
+                </span>
+              </label>
+              {/* <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="questionType"
+                  checked={formData.type === 'multiple_choice'}
+                  onChange={() => handleTypeChange('multiple_choice')}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                />
+                <span className="ml-2 text-sm text-gray-700">
+                  Multiple Choice (checkboxes)
+                </span>
+              </label> */}
+            </div>
+          </div>
+
+          {(formData.type === 'single_choice' || formData.type === 'multiple_choice') && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-sm font-medium text-gray-700">
+                  Options *
+                </label>
+                <button
+                  type="button"
+                  onClick={addOption}
+                  className="inline-flex items-center px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                >
+                  <Plus size={16} className="mr-1" />
+                  Add Option
+                </button>
+              </div>
+              <div className="space-y-2">
+                {formData.options.map((option, index) => (
+                  <div key={index} className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      value={option.text}
+                      onChange={(e) => updateOption(index, e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder={`Option ${index + 1}`}
+                      required
+                    />
+                    {formData.options.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeOption(index)}
+                        className="p-2 text-red-600 hover:text-red-800 transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {formData.options.length === 0 && (
+                  <p className="text-sm text-gray-500 italic">Click "Add Option" to add choices</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Visibility *
+            </label>
+            <div className="space-y-2">
+              <label className="flex items-center cursor-pointer">
                 <input
                   type="radio"
                   name="isCommon"
@@ -134,7 +280,7 @@ const CreateQuestion: React.FC = () => {
                   Common Question (visible to all teams)
                 </span>
               </label>
-              <label className="flex items-center">
+              <label className="flex items-center cursor-pointer">
                 <input
                   type="radio"
                   name="isCommon"
@@ -154,12 +300,12 @@ const CreateQuestion: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 Select Teams
               </label>
-              <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-md p-3">
+              <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-md p-3 bg-gray-50">
                 {teams.length === 0 ? (
                   <p className="text-sm text-gray-500">No teams available</p>
                 ) : (
                   teams.map(team => (
-                    <label key={team._id} className="flex items-center">
+                    <label key={team._id} className="flex items-center cursor-pointer">
                       <input
                         type="checkbox"
                         checked={formData.teams.includes(team._id)}
@@ -185,7 +331,7 @@ const CreateQuestion: React.FC = () => {
                 min="0"
                 value={formData.order}
                 onChange={(e) => setFormData(prev => ({ ...prev, order: parseInt(e.target.value) || 0 }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="0"
               />
             </div>
@@ -194,7 +340,7 @@ const CreateQuestion: React.FC = () => {
                 Status
               </label>
               <div className="flex items-center h-10">
-                <label className="flex items-center">
+                <label className="flex items-center cursor-pointer">
                   <input
                     type="checkbox"
                     checked={formData.active}
@@ -207,19 +353,20 @@ const CreateQuestion: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex justify-end space-x-4 pt-6">
+          <div className="flex justify-end space-x-4 pt-6 border-t">
             <button
               type="button"
-              onClick={() => navigate('/admin/questions')}
-              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              onClick={handleCancel}
+              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
               disabled={loading}
             >
               Cancel
             </button>
             <button
-              type="submit"
-              disabled={loading}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              type="button"
+              onClick={handleSubmit}
+              disabled={loading || !formData.text.trim()}
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -229,7 +376,7 @@ const CreateQuestion: React.FC = () => {
               {loading ? 'Creating...' : 'Create Question'}
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

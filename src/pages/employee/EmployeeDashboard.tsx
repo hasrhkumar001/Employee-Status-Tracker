@@ -128,7 +128,7 @@ const EmployeeDashboard: React.FC = () => {
 
   // Function to get the latest status for a team (for displaying status in team cards)
   const getLatestStatusForTeam = (teamId: string) => {
-    const teamUpdates = recentUpdates.filter(update => update.team._id === teamId);
+    const teamUpdates = recentUpdates.filter(update => update.team?._id === teamId);
     return teamUpdates.length > 0 ? teamUpdates[0] : null;
   };
 
@@ -140,7 +140,7 @@ const EmployeeDashboard: React.FC = () => {
     return recentUpdates.find(update => {
       const updateDate = new Date(update.date);
       const updateDateStr = updateDate.toISOString().split('T')[0];
-      return update.team._id === teamId && updateDateStr === todayStr;
+      return update.team?._id === teamId && updateDateStr === todayStr;
     });
   };
 
@@ -238,7 +238,7 @@ const EmployeeDashboard: React.FC = () => {
                         </span>
                       ) : (
                         <span className="text-green-600">
-                          {latestStatus.responses?.length || 0} responses
+                          {/* {latestStatus.responses?.length || 0} responses */}
                         </span>
                       )}
                     </div>
@@ -255,14 +255,14 @@ const EmployeeDashboard: React.FC = () => {
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Recent Status Updates</h2>
         {recentUpdates.length > 0 ? (
           <div className="space-y-6">
-            {recentUpdates.slice(0, 10).map(update => (
+            {recentUpdates.slice(0, 5).map(update => (
               <div key={update._id} className={`border-l-4 pl-4 py-1 ${
                 update.isLeave ? 'border-orange-500' : 'border-blue-500'
               }`}>
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <h3 className="font-medium text-gray-900 flex items-center">
-                      {update.team.name}
+                      {update.team?.name}
                       {update.isLeave && (
                         <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
                           <UserX size={12} className="mr-1" />
@@ -289,7 +289,7 @@ const EmployeeDashboard: React.FC = () => {
                     {update.responses && update.responses.length > 0 ? (
                       update.responses.map((response, index) => (
                         <div key={index} className="text-sm">
-                          <p className="font-medium text-gray-700">{response.question.text}</p>
+                          <p className="font-medium text-gray-700">{response.question?.text}</p>
                           <p className="text-gray-600 mt-1">{response.answer}</p>
                         </div>
                       ))
@@ -300,6 +300,15 @@ const EmployeeDashboard: React.FC = () => {
                 )}
               </div>
             ))}
+            <div className="flex justify-end mt-4">
+  <Link
+    to="/employee/status"
+    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+  >
+    View All Status Updates
+    <ArrowRight size={16} className="ml-2" />
+  </Link>
+</div>
           </div>
         ) : (
           <p className="text-gray-500 text-center py-4">No recent status updates.</p>

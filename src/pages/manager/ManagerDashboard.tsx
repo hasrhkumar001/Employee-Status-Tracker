@@ -129,7 +129,7 @@ const ManagerDashboard: React.FC = () => {
 
   const handleExportTeamStatus = async (teamId: string) => {
     try {
-      const response = await axios.get('/api/status/export/excel', {
+      const response = await axios.get('/api/reports/excel', {
         params: { team: teamId },
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -153,7 +153,7 @@ const ManagerDashboard: React.FC = () => {
 
   const handleExportAllStatus = async () => {
     try {
-      const response = await axios.get('/api/status/export/excel', {
+      const response = await axios.get('/api/reports/excel', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },

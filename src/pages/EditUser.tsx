@@ -1,45 +1,117 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
+import Select from 'react-select';
+
+interface TeamOption {
+  value: string; // Changed from 'id' to 'value' for react-select
+  label: string; // Changed from 'name' to 'label' for react-select
+}
 
 const EditUser: React.FC = () => {
   const { id } = useParams();
-  const [formData, setFormData] = useState({ name: '', email: '', role: 'employee', password: '' });
   const navigate = useNavigate();
 
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    role: 'employee',
+    password: '',
+    teams: [] as string[],
+  });
+
+  const [allTeams, setAllTeams] = useState<TeamOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch user and team data
   useEffect(() => {
-    const fetchUser = async () => {
+    const fetchData = async () => {
       try {
-        const res = await axios.get(`/api/users/${id}`);
-        setFormData({ ...res.data, password: '' }); // Don't prefill password
+        setLoading(true);
+        setError(null);
+        
+        const [userRes, teamsRes] = await Promise.all([
+          axios.get(`/api/users/${id}`),
+          axios.get('/api/teams'),
+        ]);
+
+        const user = userRes.data;
+        const teamOptions = teamsRes.data.map((team: any) => ({
+          value: team._id, // Changed to 'value'
+          label: team.name, // Changed to 'label'
+        }));
+
+        // Extract team IDs from user.teams array of objects
+        const userTeamIds = user.teams ? user.teams.map((team: any) => team._id) : [];
+        
+        setFormData({
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          password: '',
+          teams: userTeamIds,
+        });
+
+        setAllTeams(teamOptions);
       } catch (err: any) {
-        alert('Failed to fetch user details');
+        setError('Failed to load user or teams');
+        console.error('Error fetching data:', err);
+      } finally {
+        setLoading(false);
       }
     };
-    fetchUser();
+
+    if (id) {
+      fetchData();
+    }
   }, [id]);
 
+  // Handle form input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  // Handle team selection change
+  const handleTeamChange = (selectedOptions: TeamOption[] | null) => {
+    const selectedTeamIds = selectedOptions ? selectedOptions.map((option) => option.value) : [];
+    setFormData({ ...formData, teams: selectedTeamIds });
+  };
+
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Only send password if it's not empty
       const dataToSend = { ...formData };
       if (!dataToSend.password) delete dataToSend.password;
+
       await axios.put(`/api/users/${id}`, dataToSend);
       navigate('/admin/users');
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to update user');
+      setError(err.response?.data?.message || 'Failed to update user');
     }
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-md mx-auto mt-10 p-8 bg-white rounded-lg shadow-lg">
+        <div className="text-center">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto mt-10 p-8 bg-white rounded-lg shadow-lg">
       <h2 className="text-2xl font-bold mb-6 text-gray-800">Edit User</h2>
+      
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+          {error}
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Name */}
         <div>
           <label className="block text-gray-700 font-medium mb-1" htmlFor="name">Name</label>
           <input
@@ -52,6 +124,8 @@ const EditUser: React.FC = () => {
             autoComplete="off"
           />
         </div>
+
+        {/* Email */}
         <div>
           <label className="block text-gray-700 font-medium mb-1" htmlFor="email">Email</label>
           <input
@@ -65,6 +139,8 @@ const EditUser: React.FC = () => {
             autoComplete="off"
           />
         </div>
+
+        {/* Password */}
         <div>
           <label className="block text-gray-700 font-medium mb-1" htmlFor="password">Password</label>
           <input
@@ -78,6 +154,8 @@ const EditUser: React.FC = () => {
             placeholder="Leave blank to keep unchanged"
           />
         </div>
+
+        {/* Role */}
         <div>
           <label className="block text-gray-700 font-medium mb-1" htmlFor="role">Role</label>
           <select
@@ -92,9 +170,27 @@ const EditUser: React.FC = () => {
             <option value="admin">Admin</option>
           </select>
         </div>
+
+        {/* Teams */}
+        <div>
+          <label className="block text-gray-700 font-medium mb-1">Teams</label>
+          <Select
+            isMulti
+            name="teams"
+            options={allTeams}
+            value={allTeams.filter((team) => formData.teams.includes(team.value))}
+            onChange={handleTeamChange}
+            className="react-select-container"
+            classNamePrefix="react-select"
+            isDisabled={loading}
+          />
+        </div>
+
+        {/* Submit */}
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white font-semibold py-2 rounded hover:bg-blue-700 transition"
+          disabled={loading}
+          className="w-full bg-blue-600 text-white font-semibold py-2 rounded hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Update
         </button>

@@ -1,65 +1,46 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, X, Plus } from 'lucide-react';
+import Select from 'react-select';
 
-interface Project {
-  _id: string;
-  name: string;
-}
-
-interface User {
-  _id: string;
-  name: string;
-  email: string;
-}
-
-interface Question {
-  text: string;
-  isCommon: boolean;
-}
-
-const CreateTeam: React.FC = () => {
+const CreateTeam = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [error, setError] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
   
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     project: '',
-    members: [] as string[],
-    questions: [
-      
-    ] as Question[],
+    members: [],
+    questions: [],
     active: true
   });
 
- useEffect(() => {
-  const fetchQuestions = async () => {
-    try {
-      const res = await fetch('/api/questions', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        const res = await fetch('/api/questions', {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
 
-      if (!res.ok) throw new Error('Failed to fetch questions');
-      const questions: Question[] = await res.json();
+        if (!res.ok) throw new Error('Failed to fetch questions');
+        const questions = await res.json();
 
-      setFormData(prev => ({
-        ...prev,
-        questions: questions.length ? questions : prev.questions // store full objects
-      }));
+        setFormData(prev => ({
+          ...prev,
+          questions: questions.length ? questions : prev.questions
+        }));
+      } catch (err) {
+        console.error('Error fetching questions:', err);
+      }
+    };
 
-    } catch (err) {
-      console.error('Error fetching questions:', err);
-      // Optionally show error to user
-    }
-  };
-
-  fetchQuestions();
-}, []);
+    fetchQuestions();
+  }, []);
 
   useEffect(() => {
     fetchInitialData();
@@ -86,22 +67,22 @@ const CreateTeam: React.FC = () => {
       ]);
 
       setProjects(projectsData);
-      setUsers(usersData.filter((user: User) => user._id)); // Filter out invalid users
-    } catch (err: any) {
+      setUsers(usersData.filter(user => user._id && user.role === 'employee'));
+    } catch (err) {
       setError(err.message || 'Failed to load data');
     } finally {
       setLoadingData(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-     const payload = {
-    ...formData,
-    questions: formData.questions.map(q => q._id), // send only IDs
-  };
+    const payload = {
+      ...formData,
+      questions: formData.questions.map(q => q._id),
+    };
 
     try {
       const response = await fetch('/api/teams', {
@@ -119,7 +100,7 @@ const CreateTeam: React.FC = () => {
       }
 
       navigate('/admin/teams');
-    } catch (err: any) {
+    } catch (err) {
       alert(err.message || 'Failed to create team');
       setError(err.message || 'Failed to create team');
     } finally {
@@ -127,40 +108,29 @@ const CreateTeam: React.FC = () => {
     }
   };
 
- const addQuestion = (questionId) => {
-  if (!questionId) return;
+  const addQuestion = () => {
+    alert('Add question functionality not implemented');
+  };
 
-  setFormData((prevFormData) => ({
-    ...prevFormData,
-    questions: [...prevFormData.questions, questionId],
-  }));
-};
-
-
-  const removeQuestion = (index: number) => {
+  const removeQuestion = (index) => {
     const newQuestions = formData.questions.filter((_, i) => i !== index);
     setFormData({ ...formData, questions: newQuestions });
   };
 
-  const updateQuestion = (index: number, text: string) => {
+  const updateQuestion = (index, text) => {
     const newQuestions = [...formData.questions];
     newQuestions[index] = { ...newQuestions[index], text };
     setFormData({ ...formData, questions: newQuestions });
   };
 
-  const toggleMember = (userId: string) => {
-    const isSelected = formData.members.includes(userId);
-    if (isSelected) {
-      setFormData({
-        ...formData,
-        members: formData.members.filter(id => id !== userId)
-      });
-    } else {
-      setFormData({
-        ...formData,
-        members: [...formData.members, userId]
-      });
-    }
+  const memberOptions = users.map(user => ({
+    value: user._id,
+    label: `${user.name} (${user.email})`
+  }));
+
+  const handleMemberChange = (selectedOptions) => {
+    const selectedMemberIds = selectedOptions ? selectedOptions.map(option => option.value) : [];
+    setFormData({ ...formData, members: selectedMemberIds });
   };
 
   if (loadingData) {
@@ -261,23 +231,20 @@ const CreateTeam: React.FC = () => {
 
         <div className="bg-white shadow-sm rounded-lg p-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Team Members</h2>
-          
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {users.map(user => (
-              <div key={user._id} className="flex items-center">
-                <input
-                  id={`member-${user._id}`}
-                  type="checkbox"
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  checked={formData.members.includes(user._id)}
-                  onChange={() => toggleMember(user._id)}
-                />
-                <label htmlFor={`member-${user._id}`} className="ml-2 block text-sm text-gray-900">
-                  <div className="font-medium">{user.name}</div>
-                  <div className="text-gray-500 text-xs">{user.email}</div>
-                </label>
-              </div>
-            ))}
+          <div>
+            <label htmlFor="members" className="block text-sm font-medium text-gray-700">
+              Select Team Members (Employees) *
+            </label>
+            <Select
+              id="members"
+              isMulti
+              options={memberOptions}
+              value={memberOptions.filter(option => formData.members.includes(option.value))}
+              onChange={handleMemberChange}
+              placeholder="Select team members..."
+              className="mt-1"
+              classNamePrefix="react-select"
+            />
           </div>
         </div>
 

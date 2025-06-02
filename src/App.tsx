@@ -29,6 +29,8 @@ import ManageQuestionTeams from './pages/ManageQuestionTeams';
 import CreateProject from './pages/CreateProject';
 import EditProject from './pages/EditProject';
 import CreateUser from './pages/CreateUser';
+import EditProfie, { ProfileEdit } from './ProfileEdit';
+import EmployeeStatus from './pages/employee/EmployeeStatus';
 
 function App() {
   return (
@@ -47,6 +49,7 @@ function App() {
             <Route path="/admin/users/new" element={<RoleRoute roles={['admin', 'manager']}><CreateUser /></RoleRoute>} />
            
             <Route path="/admin/users/:id/edit" element={<RoleRoute roles={['admin', 'manager']}><EditUser /></RoleRoute>} />
+             <Route path="/profile" element={<ProfileEdit />} />
             <Route path="admin/projects" element={<RoleRoute roles={['admin']}> <ProjectManagement /></RoleRoute>} />
 
             <Route path="admin/projects/create" element={<RoleRoute roles={['admin']}><ProjectForm /> </RoleRoute>} />
@@ -87,6 +90,9 @@ function App() {
             {/* Employee Routes */}
             <Route path="employee" element={<RoleRoute roles={[ 'employee']}><EmployeeDashboard /></RoleRoute>} />
             <Route path="employee/status/:teamId" element={<RoleRoute roles={[ 'employee']}><StatusUpdate /></RoleRoute>} />
+            <Route path="employee/status" element={<RoleRoute roles={[ 'employee']}><EmployeeStatus /></RoleRoute>} />
+
+            {/* Edit Profile */}
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

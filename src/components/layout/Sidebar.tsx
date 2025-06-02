@@ -55,7 +55,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
 
           {/* Admin links */}
           {user?.role === 'admin' && (
-            <div className="mb-4">
+            <div className="">
               {/* <h3 className="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider my-2">
                 Admin
               </h3> */}
@@ -114,7 +114,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
 
           {/* Manager links */}
           {( user?.role === 'manager') && (
-            <div className="mb-4">
+            <div className="">
               {/* <h3 className="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider my-2">
                 Manager
               </h3> */}
@@ -143,7 +143,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
 
           {/* Employee links */}
             {( user?.role === 'employee') && (
-          <div className="mb-4">
+          <div className="">
             {/* <h3 className="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider my-2">
               Employee
             </h3> */}
@@ -158,6 +158,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
               <span>My Status</span>
             </Link>
           </div>)}
+            <Link
+              to="/profile"
+              className={`flex items-center px-4 py-3 mb-2 rounded-md ${
+              isActive('/profile/edit') ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+              onClick={() => setIsOpen(false)}
+            >
+              <UserCheck size={20} className="mr-3" />
+              <span>Profile</span>
+            </Link>
 
           <div className="mt-auto border-t pt-4">
             <button

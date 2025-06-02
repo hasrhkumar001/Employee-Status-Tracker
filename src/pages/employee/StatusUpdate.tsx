@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Save, AlertCircle, Calendar, Coffee, Lock, Edit } from 'lucide-react';
+import { Save, AlertCircle, Calendar, Coffee } from 'lucide-react';
 import axios from 'axios';
+
+interface QuestionOption {
+  text: string;
+  order: number;
+}
 
 interface Question {
   _id: string;
   text: string;
+  type: 'text' | 'single_choice' | 'multiple_choice';
+  options: QuestionOption[];
   isCommon: boolean;
+  order: number;
 }
 
 interface StatusResponse {
@@ -17,6 +25,8 @@ interface StatusResponse {
 interface PreviousStatus {
   _id: string;
   date: string;
+  isLeave: boolean;
+  leaveReason?: string;
   responses: Array<{
     question: {
       _id: string;
@@ -27,8 +37,6 @@ interface PreviousStatus {
   updatedBy: {
     name: string;
   };
-  isLeave?: boolean;
-  leaveReason?: string;
 }
 
 interface User {
@@ -48,39 +56,87 @@ const StatusUpdate: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [isLeave, setIsLeave] = useState(false);
-  const [leaveReason, setLeaveReason] = useState('');
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [isLeave, setIsLeave] = useState<boolean>(false);
+  const [leaveReason, setLeaveReason] = useState<string>('');
+  const [hasExistingStatus, setHasExistingStatus] = useState<boolean>(false);
+  const [existingStatusType, setExistingStatusType] = useState<'status' | 'leave' | null>(null);
 
-  // Calculate date restrictions
-  const today = new Date();
-  const twoDaysAgo = new Date(today);
-  twoDaysAgo.setDate(today.getDate() - 2);
-  
-  const minDate = twoDaysAgo.toISOString().split('T')[0];
-  const maxDate = today.toISOString().split('T')[0];
-
-  // Helper function to check if data already exists for selected date
-  const hasExistingData = () => {
-    return previousStatus !== null;
+  // Helper function to check if date is allowed (today and last 2 days)
+  const isDateAllowed = (dateString: string): boolean => {
+    const selectedDate = new Date(dateString);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    
+    const twoDaysAgo = new Date(today);
+    twoDaysAgo.setDate(today.getDate() - 2);
+    twoDaysAgo.setHours(0, 0, 0, 0);
+    
+    return selectedDate >= twoDaysAgo && selectedDate <= today;
   };
 
-  // Helper function to check if current user can edit
-  const canEdit = () => {
-    if (!hasExistingData()) return true; // No existing data, can create new
-    if (!currentUser || !previousStatus) return false;
+  // Get min and max dates for date input
+  const getDateConstraints = () => {
+    const today = new Date();
+    const twoDaysAgo = new Date(today);
+    twoDaysAgo.setDate(today.getDate() - 2);
     
-    // User can edit their own status or if they're a manager/admin
-    const isOwnStatus = previousStatus.updatedBy && 
-      (currentUser.id === previousStatus.updatedBy.id || 
-       currentUser.name === previousStatus.updatedBy.name);
-    
-    return isOwnStatus || currentUser.role === 'manager' || currentUser.role === 'admin';
+    return {
+      min: twoDaysAgo.toISOString().split('T')[0],
+      max: today.toISOString().split('T')[0]
+    };
   };
 
-  // Helper function to determine if form should be disabled
-  const isFormDisabled = () => {
-    return hasExistingData() && !isEditMode;
+  // Check for existing status on selected date
+  const checkExistingStatus = async (date: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token || !currentUser || !teamId) return;
+
+      const statusRes = await axios.get('/api/status', {
+        headers: { Authorization: `Bearer ${token}` },
+        params: {
+          user: currentUser.id,
+          team: teamId,
+          date: date
+        }
+      });
+
+      if (statusRes.data && statusRes.data.length > 0) {
+        const existingStatus = statusRes.data[0];
+        setHasExistingStatus(true);
+        setExistingStatusType(existingStatus.isLeave ? 'leave' : 'status');
+        
+        if (existingStatus.isLeave) {
+          setIsLeave(true);
+          setLeaveReason(existingStatus.leaveReason || '');
+        } else {
+          setIsLeave(false);
+          setLeaveReason('');
+          // Pre-populate responses if it's a status update
+          const updatedResponses = questions.map(q => {
+            const existingResponse = existingStatus.responses.find(
+              (r: any) => r.question._id === q._id || r.question === q._id
+            );
+            return {
+              question: q._id,
+              answer: existingResponse ? existingResponse.answer : ''
+            };
+          });
+          setResponses(updatedResponses);
+        }
+      } else {
+        setHasExistingStatus(false);
+        setExistingStatusType(null);
+        setIsLeave(false);
+        setLeaveReason('');
+        // Reset responses
+        setResponses(questions.map(q => ({ question: q._id, answer: '' })));
+      }
+    } catch (err) {
+      console.error('Error checking existing status:', err);
+      setHasExistingStatus(false);
+      setExistingStatusType(null);
+    }
   };
 
   useEffect(() => {
@@ -96,14 +152,22 @@ const StatusUpdate: React.FC = () => {
         const userRes = await axios.get('/api/auth/me', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        console.log('Current user data:', userRes.data);
         setCurrentUser(userRes.data);
 
-        // Fetch questions
+        // Fetch questions for the specific team if teamId is provided
+        const questionsParams: any = {};
+        if (teamId) {
+          questionsParams.team = teamId;
+        }
+
         const questionsRes = await axios.get('/api/questions', {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
+          params: questionsParams
         });
-        const realQuestions: Question[] = questionsRes.data;
+        
+        console.log('Fetched questions:', questionsRes.data);
+        const realQuestions: Question[] = questionsRes.data
+          .sort((a: Question, b: Question) => a.order - b.order); // Sort by order
 
         setQuestions(realQuestions);
         setResponses(
@@ -113,9 +177,20 @@ const StatusUpdate: React.FC = () => {
           }))
         );
 
-        // Fetch previous status update for selected date
+        // Fetch previous status update for current user and team (latest one)
         if (teamId && userRes.data) {
-          await fetchStatusForDate(selectedDate, userRes.data, token);
+          const statusRes = await axios.get('/api/status', {
+            headers: { Authorization: `Bearer ${token}` },
+            params: {
+              user: userRes.data.id,
+              team: teamId
+            }
+          });
+
+          if (statusRes.data && statusRes.data.length > 0) {
+            // Get the most recent status (first in the sorted array)
+            setPreviousStatus(statusRes.data[0]);
+          }
         }
       } catch (err: any) {
         console.error('Error fetching data:', err);
@@ -128,75 +203,12 @@ const StatusUpdate: React.FC = () => {
     fetchData();
   }, [teamId]);
 
-  const fetchStatusForDate = async (date: string, user: User, token: string) => {
-    try {
-      const statusRes = await axios.get('/api/status', {
-        headers: { Authorization: `Bearer ${token}` },
-        params: {
-          user: user.id,
-          team: teamId,
-          date: date
-        }
-      });
-
-      if (statusRes.data && statusRes.data.length > 0) {
-        const status = statusRes.data[0];
-        setPreviousStatus(status);
-        setIsEditMode(false); // Reset edit mode when fetching new data
-        
-        // If there's an existing status for this date, populate the form
-        if (status.isLeave) {
-          setIsLeave(true);
-          setLeaveReason(status.leaveReason || '');
-          setResponses(questions.map(q => ({ question: q._id, answer: '' })));
-        } else {
-          setIsLeave(false);
-          setLeaveReason('');
-          // Populate responses from existing status
-          const existingResponses = status.responses.map((r: any) => ({
-            question: r.question._id || r.question,
-            answer: r.answer
-          }));
-          setResponses(existingResponses);
-        }
-      } else {
-        setPreviousStatus(null);
-        setIsEditMode(false);
-        setIsLeave(false);
-        setLeaveReason('');
-        setResponses(questions.map(q => ({ question: q._id, answer: '' })));
-      }
-    } catch (err) {
-      console.error('Error fetching status for date:', err);
-      setPreviousStatus(null);
-      setIsEditMode(false);
+  // Check existing status when date or questions change
+  useEffect(() => {
+    if (currentUser && teamId && questions.length > 0) {
+      checkExistingStatus(selectedDate);
     }
-  };
-
-  const handleDateChange = async (date: string) => {
-    setSelectedDate(date);
-    setError(null);
-    setIsEditMode(false); // Reset edit mode when date changes
-    
-    if (currentUser) {
-      const token = localStorage.getItem('token');
-      if (token) {
-        await fetchStatusForDate(date, currentUser, token);
-      }
-    }
-  };
-
-  const validateDate = (date: string): boolean => {
-    const selectedDateObj = new Date(date);
-    const minDateObj = new Date(minDate);
-    const maxDateObj = new Date(maxDate);
-    
-    return selectedDateObj >= minDateObj && selectedDateObj <= maxDateObj;
-  };
-
-  const handleEditToggle = () => {
-    setIsEditMode(!isEditMode);
-  };
+  }, [selectedDate, currentUser, teamId, questions]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,42 +225,31 @@ const StatusUpdate: React.FC = () => {
         throw new Error('Missing user or team information');
       }
 
-      if (!validateDate(selectedDate)) {
+      if (!isDateAllowed(selectedDate)) {
         throw new Error('You can only add status for today or the last two days');
       }
 
-      let statusData;
-
+      // Validate based on leave status
       if (isLeave) {
-        // Leave submission
         if (!leaveReason.trim()) {
           throw new Error('Please provide a reason for leave');
         }
-
-        statusData = {
-          team: teamId,
-          user: currentUser.id || currentUser._id,
-          date: new Date(selectedDate).toISOString(),
-          isLeave: true,
-          leaveReason: leaveReason.trim(),
-          responses: []
-        };
       } else {
-        // Regular status submission
+        // Filter out empty responses for status updates
         const validResponses = responses.filter(r => r.answer.trim() !== '');
-
         if (validResponses.length === 0) {
           throw new Error('Please provide at least one response');
         }
-
-        statusData = {
-          team: teamId,
-          user: currentUser.id || currentUser._id,
-          date: new Date(selectedDate).toISOString(),
-          isLeave: false,
-          responses: validResponses
-        };
       }
+
+      const statusData = {
+        team: teamId,
+        user: currentUser.id || currentUser._id,
+        date: selectedDate,
+        isLeave,
+        leaveReason: isLeave ? leaveReason : undefined,
+        responses: isLeave ? [] : responses.filter(r => r.answer.trim() !== '')
+      };
 
       console.log('Submitting status data:', statusData);
 
@@ -260,10 +261,23 @@ const StatusUpdate: React.FC = () => {
       });
 
       if (response.status === 201) {
-        alert(`${isLeave ? 'Leave' : 'Status'} ${hasExistingData() ? 'updated' : 'saved'} successfully!`);
+        alert(`${isLeave ? 'Leave' : 'Status'} updated successfully!`);
         
-        // Refresh status for the selected date
-        await fetchStatusForDate(selectedDate, currentUser, token);
+        // Refresh to check existing status
+        await checkExistingStatus(selectedDate);
+        
+        // Refresh previous status (latest one)
+        const statusRes = await axios.get('/api/status', {
+          headers: { Authorization: `Bearer ${token}` },
+          params: {
+            user: currentUser.id,
+            team: teamId
+          }
+        });
+
+        if (statusRes.data && statusRes.data.length > 0) {
+          setPreviousStatus(statusRes.data[0]);
+        }
       }
     } catch (err: any) {
       console.error('Error submitting status:', err);
@@ -271,7 +285,7 @@ const StatusUpdate: React.FC = () => {
         err.response?.data?.message || 
         err.response?.data?.errors?.[0]?.msg || 
         err.message || 
-        'Failed to save status update'
+        `Failed to save ${isLeave ? 'leave' : 'status update'}`
       );
     } finally {
       setSaving(false);
@@ -279,8 +293,6 @@ const StatusUpdate: React.FC = () => {
   };
 
   const handleResponseChange = (questionId: string, answer: string) => {
-    if (isFormDisabled()) return; // Prevent changes when disabled
-    
     setResponses(prev =>
       prev.map(r =>
         r.question === questionId ? { ...r, answer } : r
@@ -288,22 +300,129 @@ const StatusUpdate: React.FC = () => {
     );
   };
 
-  const handleLeaveToggle = () => {
-    if (isFormDisabled()) return; // Prevent changes when disabled
+  const handleMultipleChoiceChange = (questionId: string, optionText: string, checked: boolean) => {
+    const currentResponse = responses.find(r => r.question === questionId);
+    let currentAnswers = currentResponse?.answer ? currentResponse.answer.split(', ') : [];
     
-    setIsLeave(!isLeave);
-    if (!isLeave) {
-      // Switching to leave mode, clear responses
-      setResponses(questions.map(q => ({ question: q._id, answer: '' })));
+    if (checked) {
+      if (!currentAnswers.includes(optionText)) {
+        currentAnswers.push(optionText);
+      }
     } else {
-      // Switching to status mode, clear leave reason
-      setLeaveReason('');
+      currentAnswers = currentAnswers.filter(answer => answer !== optionText);
+    }
+    
+    handleResponseChange(questionId, currentAnswers.join(', '));
+  };
+
+  const handleDateChange = (date: string) => {
+    if (isDateAllowed(date)) {
+      setSelectedDate(date);
+      setError(null);
+    } else {
+      setError('You can only select today or the last two days');
     }
   };
 
-  const handleLeaveReasonChange = (value: string) => {
-    if (isFormDisabled()) return; // Prevent changes when disabled
-    setLeaveReason(value);
+  const handleLeaveToggle = (value: boolean) => {
+    setIsLeave(value);
+    if (value) {
+      setLeaveReason('');
+    } else {
+      setLeaveReason('');
+      // Reset responses when switching back to status mode
+      if (!hasExistingStatus) {
+        setResponses(questions.map(q => ({ question: q._id, answer: '' })));
+      }
+    }
+  };
+
+  const renderQuestionInput = (question: Question) => {
+    const currentResponse = responses.find(r => r.question === question._id);
+    const currentAnswer = currentResponse?.answer || '';
+
+    switch (question.type) {
+      case 'text':
+        return (
+          <textarea
+            id={`question-${question._id}`}
+            rows={3}
+            className="shadow-sm block w-full focus:ring-blue-500 focus:border-blue-500 sm:text-sm border border-gray-300 rounded-md"
+            value={currentAnswer}
+            onChange={e => handleResponseChange(question._id, e.target.value)}
+            placeholder="Enter your response..."
+            disabled={hasExistingStatus}
+          />
+        );
+
+      case 'single_choice':
+        return (
+          <div className="space-y-2">
+            {question.options
+              .sort((a, b) => a.order - b.order)
+              .map((option, optionIndex) => (
+                <div key={optionIndex} className="flex items-center">
+                  <input
+                    id={`question-${question._id}-option-${optionIndex}`}
+                    name={`question-${question._id}`}
+                    type="radio"
+                    value={option.text}
+                    checked={currentAnswer === option.text}
+                    onChange={e => handleResponseChange(question._id, e.target.value)}
+                    disabled={hasExistingStatus}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                  />
+                  <label
+                    htmlFor={`question-${question._id}-option-${optionIndex}`}
+                    className="ml-3 block text-sm font-medium text-gray-700"
+                  >
+                    {option.text}
+                  </label>
+                </div>
+              ))}
+          </div>
+        );
+
+      case 'multiple_choice':
+        const currentAnswers = currentAnswer ? currentAnswer.split(', ') : [];
+        return (
+          <div className="space-y-2">
+            {question.options
+              .sort((a, b) => a.order - b.order)
+              .map((option, optionIndex) => (
+                <div key={optionIndex} className="flex items-center">
+                  <input
+                    id={`question-${question._id}-option-${optionIndex}`}
+                    type="checkbox"
+                    checked={currentAnswers.includes(option.text)}
+                    onChange={e => handleMultipleChoiceChange(question._id, option.text, e.target.checked)}
+                    disabled={hasExistingStatus}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label
+                    htmlFor={`question-${question._id}-option-${optionIndex}`}
+                    className="ml-3 block text-sm font-medium text-gray-700"
+                  >
+                    {option.text}
+                  </label>
+                </div>
+              ))}
+          </div>
+        );
+
+      default:
+        return (
+          <textarea
+            id={`question-${question._id}`}
+            rows={3}
+            className="shadow-sm block w-full focus:ring-blue-500 focus:border-blue-500 sm:text-sm border border-gray-300 rounded-md"
+            value={currentAnswer}
+            onChange={e => handleResponseChange(question._id, e.target.value)}
+            placeholder="Enter your response..."
+            disabled={hasExistingStatus}
+          />
+        );
+    }
   };
 
   if (loading) {
@@ -314,12 +433,14 @@ const StatusUpdate: React.FC = () => {
     );
   }
 
+  const dateConstraints = getDateConstraints();
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">Daily Status Update</h1>
         <span className="text-sm text-gray-500">
-          {new Date(selectedDate).toLocaleDateString()}
+          {new Date().toLocaleDateString()}
         </span>
       </div>
 
@@ -335,133 +456,128 @@ const StatusUpdate: React.FC = () => {
       {/* Date Selection */}
       <div className="bg-white shadow-sm rounded-lg p-6">
         <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <Calendar className="h-5 w-5 text-gray-400" />
-            <label htmlFor="date-select" className="text-sm font-medium text-gray-700">
-              Select Date:
+          <div className="flex items-center">
+            <Calendar className="h-5 w-5 text-gray-400 mr-2" />
+            <label htmlFor="date" className="block text-sm font-medium text-gray-700">
+              Select Date
             </label>
           </div>
           <input
-            id="date-select"
             type="date"
+            id="date"
             value={selectedDate}
+            min={dateConstraints.min}
+            max={dateConstraints.max}
             onChange={(e) => handleDateChange(e.target.value)}
-            min={minDate}
-            max={maxDate}
-            className="block w-auto px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            className="shadow-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           />
-          <span className="text-xs text-gray-500">
-            (Can only select today or last 2 days)
-          </span>
         </div>
+        <p className="mt-2 text-xs text-gray-500">
+          You can only add status for today and the last two days
+        </p>
       </div>
 
-      {/* Status Indicator */}
-      {/* {hasExistingData() && (
-        <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-md">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Lock className="h-5 w-5 text-blue-400" />
-              <p className="ml-3 text-sm text-blue-700">
-                Status already submitted for {new Date(selectedDate).toLocaleDateString()}
-              </p>
-            </div>
-            {canEdit() && (
-              <button
-                onClick={handleEditToggle}
-                className="inline-flex items-center px-3 py-1 border border-blue-300 text-sm font-medium rounded-md text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                <Edit size={14} className="mr-1" />
-                {isEditMode ? 'Cancel Edit' : 'Edit'}
-              </button>
-            )}
+      {/* Existing Status Warning */}
+      {hasExistingStatus && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-md">
+          <div className="flex items-center">
+            <AlertCircle className="h-5 w-5 text-yellow-400" />
+            <p className="ml-3 text-sm text-yellow-700">
+              You have already added a {existingStatusType} for this date. 
+              You can view it below but cannot edit it.
+            </p>
           </div>
         </div>
-      )} */}
+      )}
 
-      {/* Leave Toggle */}
+      {/* Leave/Status Toggle */}
       <div className="bg-white shadow-sm rounded-lg p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Coffee className="h-5 w-5 text-gray-400" />
-            <span className="text-sm font-medium text-gray-700">Mark as Leave Day</span>
-          </div>
-          <button
-            type="button"
-            onClick={handleLeaveToggle}
-            disabled={isFormDisabled()}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-              isFormDisabled() 
-                ? 'bg-gray-200 cursor-not-allowed' 
-                : isLeave 
-                  ? 'bg-blue-600' 
-                  : 'bg-gray-200'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                isLeave ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
-        </div>
-        
-        {isLeave && (
-          <div className="mt-4">
-            <label htmlFor="leave-reason" className="block text-sm font-medium text-gray-700 mb-2">
-              Leave Reason *
-            </label>
+        <div className="flex items-center space-x-6">
+          <div className="flex items-center">
             <input
-              id="leave-reason"
-              type="text"
-              value={leaveReason}
-              onChange={(e) => handleLeaveReasonChange(e.target.value)}
-              disabled={isFormDisabled()}
-              placeholder="Enter reason for leave (e.g., Sick leave, Personal leave, etc.)"
-              className={`block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                isFormDisabled() ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''
-              }`}
+              id="status-mode"
+              name="mode"
+              type="radio"
+              checked={!isLeave}
+              onChange={() => handleLeaveToggle(false)}
+              disabled={hasExistingStatus}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
             />
+            <label htmlFor="status-mode" className="ml-2 block text-sm font-medium text-gray-700">
+              Status Update
+            </label>
           </div>
-        )}
+          <div className="flex items-center">
+            <input
+              id="leave-mode"
+              name="mode"
+              type="radio"
+              checked={isLeave}
+              onChange={() => handleLeaveToggle(true)}
+              disabled={hasExistingStatus}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+            />
+            <label htmlFor="leave-mode" className="ml-2 block text-sm font-medium text-gray-700 flex items-center">
+              <Coffee className="h-4 w-4 mr-1" />
+              Mark Leave
+            </label>
+          </div>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {!isLeave && (
+        {isLeave ? (
+          /* Leave Reason Section */
+          <div className="bg-white shadow-sm rounded-lg p-6">
+            <label
+              htmlFor="leave-reason"
+              className="block text-sm font-medium text-gray-900 mb-2"
+            >
+              Leave Reason *
+            </label>
+            <textarea
+              id="leave-reason"
+              rows={3}
+              className="shadow-sm block w-full focus:ring-blue-500 focus:border-blue-500 sm:text-sm border border-gray-300 rounded-md"
+              value={leaveReason}
+              onChange={(e) => setLeaveReason(e.target.value)}
+              placeholder="Please provide reason for leave..."
+              disabled={hasExistingStatus}
+              required
+            />
+          </div>
+        ) : (
+          /* Status Questions Section */
           <div className="bg-white shadow-sm rounded-lg divide-y divide-gray-200">
-            {questions.map((question, index) => (
-              <div key={question._id} className="p-6">
-                <label
-                  htmlFor={`question-${question._id}`}
-                  className="block text-sm font-medium text-gray-900"
-                >
-                  {index + 1}. {question.text}
-                </label>
-                <div className="mt-2">
-                  <textarea
-                    id={`question-${question._id}`}
-                    rows={3}
-                    className={`shadow-sm block w-full focus:ring-blue-500 focus:border-blue-500 sm:text-sm border border-gray-300 rounded-md ${
-                      isFormDisabled() ? 'bg-gray-50 text-gray-700 cursor-not-allowed' : ''
-                    }`}
-                    value={
-                      responses.find(r => r.question === question._id)?.answer || ''
-                    }
-                    onChange={e =>
-                      handleResponseChange(question._id, e.target.value)
-                    }
-                    placeholder="Enter your response..."
-                    disabled={isFormDisabled()}
-                    readOnly={isFormDisabled()}
-                  />
-                </div>
+            {questions.length === 0 ? (
+              <div className="p-6 text-center text-gray-500">
+                No questions available for this team.
               </div>
-            ))}
+            ) : (
+              questions.map((question, index) => (
+                <div key={question._id} className="p-6">
+                  <label
+                    htmlFor={`question-${question._id}`}
+                    className="block text-sm font-medium text-gray-900 mb-3"
+                  >
+                    {index + 1}. {question.text}
+                    {/* {question.type !== 'text' && (
+                      <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                        {question.type === 'single_choice' ? 'Single Choice' : 'Multiple Choice'}
+                      </span>
+                    )} */}
+                  </label>
+                  <div className="mt-2">
+                    {renderQuestionInput(question)}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
 
-        <div className="flex justify-end">
-          {!hasExistingData() || isEditMode ? (
+        {!hasExistingStatus && questions.length > 0 && (
+          <div className="flex justify-end">
             <button
               type="submit"
               disabled={saving}
@@ -475,46 +591,35 @@ const StatusUpdate: React.FC = () => {
               ) : (
                 <>
                   {isLeave ? <Coffee size={16} className="mr-2" /> : <Save size={16} className="mr-2" />}
-                  {hasExistingData() 
-                    ? (isLeave ? 'Update Leave' : 'Update Status')
-                    : (isLeave ? 'Mark Leave' : 'Submit Update')
-                  }
+                  {isLeave ? 'Mark Leave' : 'Submit Update'}
                 </>
               )}
             </button>
-          ) : (
-            <div className="text-sm text-gray-500 flex items-center">
-              <Lock className="h-4 w-4 mr-2" />
-              Status already filled. 
-              {/* {canEdit() ? 'Click Edit to modify.' : 'Contact your manager to modify.'} */}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </form>
 
       {/* Previous Updates Preview */}
       {previousStatus && (
         <div className="bg-white shadow-sm rounded-lg p-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4">
-            Status for {new Date(selectedDate).toLocaleDateString()}
+            Latest Update
           </h2>
           
           {previousStatus.isLeave ? (
-            <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-md">
-              <div className="flex items-center">
-                <Coffee className="h-5 w-5 text-orange-400" />
-                <div className="ml-3">
-                  <p className="text-sm font-medium text-orange-800">Leave Day</p>
-                  <p className="text-sm text-orange-700 mt-1">
-                    Reason: {previousStatus.leaveReason}
-                  </p>
-                </div>
+            <div className="bg-orange-50 rounded-lg p-4">
+              <div className="flex items-center mb-2">
+                <Coffee className="h-5 w-5 text-orange-600 mr-2" />
+                <h3 className="text-sm font-medium text-orange-800">Leave</h3>
               </div>
+              <p className="text-sm text-orange-700">
+                <strong>Reason:</strong> {previousStatus.leaveReason}
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
               {previousStatus.responses.map((response, index) => (
-                <div key={response.question._id}>
+                <div key={response.question._id} className="border-l-4 border-blue-200 pl-4">
                   <h3 className="text-sm font-medium text-gray-700">
                     {response.question.text}
                   </h3>
@@ -538,7 +643,7 @@ const StatusUpdate: React.FC = () => {
 
       {!previousStatus && !loading && (
         <div className="bg-gray-50 rounded-lg p-6 text-center">
-          <p className="text-gray-500">No status found for {new Date(selectedDate).toLocaleDateString()}.</p>
+          <p className="text-gray-500">No previous updates found.</p>
         </div>
       )}
     </div>

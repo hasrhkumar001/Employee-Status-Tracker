@@ -41,7 +41,8 @@ const Navbar: React.FC<NavbarProps> = ({ toggleSidebar }) => {
                 <span className="block text-xs text-gray-500 capitalize">{user?.role}</span>
               </div>
               <div className="h-8 w-8 rounded-full bg-gray-300 flex items-center justify-center text-gray-600">
-                <User size={18} />
+                <Link   to="/profile">
+                <User size={18} /></Link>
               </div>
               <button
                 className="ml-2 p-1 text-gray-600 hover:text-gray-900 focus:outline-none"
