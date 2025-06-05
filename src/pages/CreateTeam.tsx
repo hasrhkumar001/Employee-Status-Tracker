@@ -213,7 +213,7 @@ const CreateTeam = () => {
             />
           </div>
 
-          <div className="mt-4">
+          {/* <div className="mt-4">
             <div className="flex items-center">
               <input
                 id="active"
@@ -226,7 +226,7 @@ const CreateTeam = () => {
                 Active team
               </label>
             </div>
-          </div>
+          </div> */}
         </div>
 
         <div className="bg-white shadow-sm rounded-lg p-6">
@@ -251,14 +251,14 @@ const CreateTeam = () => {
         <div className="bg-white shadow-sm rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-medium text-gray-900">Standup Questions</h2>
-            <button
+            {/* <button
               type="button"
               onClick={addQuestion}
               className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200"
             >
               <Plus size={16} className="mr-1" />
               Add Question
-            </button>
+            </button> */}
           </div>
 
           <div className="space-y-3">

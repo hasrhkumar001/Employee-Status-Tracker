@@ -98,8 +98,8 @@ const TeamStatus: React.FC = () => {
 
       // Get the selected date to determine date range
       const currentDate = new Date(selectedDate);
-      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 2);
+      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
 
       console.log('Exporting with params:', {
         team: teamId,

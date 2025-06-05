@@ -45,7 +45,7 @@ const ManagerDashboard: React.FC = () => {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
-        
+
         const teamsData = teamsResponse.data;
         setTeams(teamsData);
 
@@ -54,7 +54,7 @@ const ManagerDashboard: React.FC = () => {
           try {
             // Get today's date in YYYY-MM-DD format
             const today = new Date().toISOString().split('T')[0];
-            
+
             // Fetch today's status updates for this team
             const statusResponse = await axios.get('/api/status', {
               params: {
@@ -67,7 +67,7 @@ const ManagerDashboard: React.FC = () => {
             });
 
             const todayStatuses = statusResponse.data;
-            
+
             // Create a set of user IDs who have submitted status today
             const usersWithStatus = new Set(
               todayStatuses.map((status: any) => status.user._id)
@@ -113,15 +113,15 @@ const ManagerDashboard: React.FC = () => {
       } catch (err: any) {
         console.error('Error fetching dashboard data:', err);
         setError(
-          err.response?.data?.message || 
-          err.message || 
+          err.response?.data?.message ||
+          err.message ||
           'Failed to fetch dashboard data'
         );
       } finally {
         setLoading(false);
       }
     };
-    
+
     if (user) {
       fetchData();
     }
@@ -129,8 +129,17 @@ const ManagerDashboard: React.FC = () => {
 
   const handleExportTeamStatus = async (teamId: string) => {
     try {
+      // Get the first and last day of the current month in YYYY-MM-DD format
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth(), 2).toISOString().split('T')[0];
+      const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().split('T')[0];
+
       const response = await axios.get('/api/reports/excel', {
-        params: { team: teamId },
+        params: {
+          team: teamId,
+          startDate: startDate,
+          endDate: endDate
+        },
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
@@ -153,7 +162,15 @@ const ManagerDashboard: React.FC = () => {
 
   const handleExportAllStatus = async () => {
     try {
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth(), 2).toISOString().split('T')[0];
+      const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().split('T')[0];
       const response = await axios.get('/api/reports/excel', {
+        params: {
+
+          startDate: startDate,
+          endDate: endDate
+        },
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
@@ -186,8 +203,8 @@ const ManagerDashboard: React.FC = () => {
     return (
       <div className="bg-red-50 p-4 rounded-md">
         <p className="text-red-700">Error: {error}</p>
-        <button 
-          onClick={() => window.location.reload()} 
+        <button
+          onClick={() => window.location.reload()}
           className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
         >
           Retry
@@ -226,7 +243,7 @@ const ManagerDashboard: React.FC = () => {
                     Updated
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                   Pending
+                    Pending
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Last Update
@@ -309,7 +326,7 @@ const ManagerDashboard: React.FC = () => {
                   </Link>
                 </div>
               </div>
-              
+
               <div className="mt-4">
                 <h4 className="text-sm font-medium text-gray-700 mb-2">Team Members ({team.members.length})</h4>
                 {team.members.length === 0 ? (
@@ -332,7 +349,7 @@ const ManagerDashboard: React.FC = () => {
                   </ul>
                 )}
               </div>
-              
+
               <div className="mt-4 pt-4 border-t border-gray-100">
                 <button
                   onClick={() => handleExportTeamStatus(team._id)}

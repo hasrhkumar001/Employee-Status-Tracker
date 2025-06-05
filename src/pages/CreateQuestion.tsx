@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 interface Team {
   _id: string;
@@ -142,13 +142,14 @@ const CreateQuestion: React.FC = () => {
   return (
     <div className="max-w-2xl mx-auto space-y-6 p-4">
       <div className="flex items-center space-x-4">
-        <button
+        <Link
+        to={'/admin/questions'}
           onClick={handleBack}
           className="inline-flex items-center text-gray-600 hover:text-gray-800 transition-colors"
         >
           <ArrowLeft size={20} className="mr-2" />
           Back to Questions
-        </button>
+        </Link>
         <h1 className="text-2xl font-bold text-gray-800">Create New Question</h1>
       </div>
 

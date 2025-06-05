@@ -48,11 +48,11 @@ router.post('/', [
 
   try {
     // Check date restrictions
-    if (!isDateAllowed(date)) {
-      return res.status(400).json({ 
-        message: 'You can only add status for today or the last two days' 
-      });
-    }
+    // if (!isDateAllowed(date)) {
+    //   return res.status(400).json({ 
+    //     message: 'You can only add status for today or the last two days' 
+    //   });
+    // }
 
     // Check if updating own status or manager updating team member status
     const isOwnStatus = req.user._id.toString() === user;
@@ -137,43 +137,69 @@ router.post('/', [
 // @access  Private (Team Member for own, Manager for team)
 router.get('/', auth, async (req, res) => {
   try {
-    const { user, team, date, month } = req.query;
+    const { user, teams, date, month, startDate, endDate } = req.query;
     let query = {};
-    
+
     // Apply filters
     if (user) query.user = user;
-    if (team) query.team = team;
-    
+
+    if (teams) {
+      const teamArray = teams.split(',');
+      query.team = { $in: teamArray };
+    }
+
     // Date filters
     if (date) {
-      const startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
-      
-      const endDate = new Date(date);
-      endDate.setHours(23, 59, 59, 999);
-      
-      query.date = { $gte: startDate, $lte: endDate };
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+
+      query.date = { $gte: start, $lte: end };
+    } else if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+
+      query.date = { $gte: start, $lte: end };
+    } else if (startDate && !endDate) {
+      // Filter from startDate to today
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+
+      const end = new Date();
+      end.setHours(23, 59, 59, 999);
+
+      query.date = { $gte: start, $lte: end };
+    } else if (!startDate && endDate) {
+      // Filter from earliest to endDate
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+
+      query.date = { $lte: end };
     } else if (month) {
       const [year, monthIndex] = month.split('-');
-      const startDate = new Date(year, parseInt(monthIndex) - 1, 1);
-      const endDate = new Date(year, parseInt(monthIndex), 0, 23, 59, 59, 999);
-      
-      query.date = { $gte: startDate, $lte: endDate };
+      const start = new Date(year, parseInt(monthIndex) - 1, 1);
+      const end = new Date(year, parseInt(monthIndex), 0);
+      end.setHours(23, 59, 59, 999);
+
+      query.date = { $gte: start, $lte: end };
     }
-    
+
     // Access control
     if (req.user.role === 'employee') {
-      // Employees can only see their own status
       query.user = req.user._id;
     } else if (req.user.role === 'manager') {
-      // Managers can see status for their team members
-      if (!team) {
+      if (!teams) {
         const accessibleTeams = await Team.find({ project: { $in: req.user.projects } });
         const teamIds = accessibleTeams.map(team => team._id);
         query.team = { $in: teamIds };
       }
     }
-    
+
     const statuses = await Status.find(query)
       .sort({ date: -1 })
       .populate('user', 'name email')
@@ -181,7 +207,7 @@ router.get('/', auth, async (req, res) => {
       .populate('project', 'name')
       .populate('responses.question', 'text')
       .populate('updatedBy', 'name');
-    
+
     res.json(statuses);
   } catch (err) {
     console.error(err.message);

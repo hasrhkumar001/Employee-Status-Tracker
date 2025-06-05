@@ -264,7 +264,7 @@ const EditQuestion: React.FC = () => {
                 placeholder="0"
               />
             </div>
-            <div>
+            {/* <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Status
               </label>
@@ -279,7 +279,7 @@ const EditQuestion: React.FC = () => {
                   <span className="ml-2 text-sm text-gray-700">Active</span>
                 </label>
               </div>
-            </div>
+            </div> */}
           </div>
 
           <div className="flex justify-end space-x-4 pt-6">

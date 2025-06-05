@@ -102,8 +102,8 @@ const EditProject: React.FC = () => {
 
     if (!formData.name.trim()) {
       newErrors.name = 'Project name is required';
-    } else if (formData.name.trim().length < 3) {
-      newErrors.name = 'Project name must be at least 3 characters';
+    } else if (formData.name.trim().length < 2) {
+      newErrors.name = 'Project name must be at least 2 characters';
     }
 
     if (formData.description.trim().length > 500) {
@@ -281,7 +281,7 @@ const EditProject: React.FC = () => {
             </div>
 
             {/* Status */}
-            <div>
+            {/* <div>
               <label className="flex items-center space-x-3">
                 <input
                   type="checkbox"
@@ -297,7 +297,7 @@ const EditProject: React.FC = () => {
               <p className="mt-1 text-sm text-gray-500">
                 Active projects are visible to team members and can be worked on
               </p>
-            </div>
+            </div> */}
           </div>
 
           {/* Manager Assignment */}

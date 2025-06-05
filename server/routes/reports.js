@@ -34,11 +34,34 @@ router.get('/excel', auth, isManager, async (req, res) => {
         $gte: new Date(startDate),
         $lte: new Date(endDate),
       };
-    } else if (month && year) {
-      const startMonthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const endMonthDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
+    } else if (startDate) {
+      dateFilter = {
+        $gte: new Date(startDate),
+        $lte: new Date(), // up to current date
+      };
+    } else if (endDate) {
+      const end = new Date(endDate);
+      const year = end.getFullYear();
+      const month = end.getMonth();
+
+      const start = new Date(year, month, 1); // First day of the same month and year
+
+      dateFilter = {
+        $gte: start,
+        $lte: end,
+      };
+    }
+    else if (month) {
+      const [yearStr, monthStr] = month.split("-");
+      const year = parseInt(yearStr);
+      const monthNum = parseInt(monthStr) - 1;
+
+      const startMonthDate = new Date(year, monthNum, 1); // Start of the selected month
+      const endMonthDate = new Date(year, monthNum + 1, 0, 23, 59, 59, 999); // Last day of the month
+
       dateFilter = { $gte: startMonthDate, $lte: endMonthDate };
-    } else {
+    }
+    else {
       const today = new Date();
       const startMonthDate = new Date(today.getFullYear(), today.getMonth(), 1);
       const endMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -160,7 +183,7 @@ router.get('/excel', auth, isManager, async (req, res) => {
     worksheet.columns = headers.map((header, i) => ({
       header,
       key: header,
-      width: i < 3 ? 20 : 15,
+      width: i === 2 ? 50 : i < 3 ? 20 : 15,
     }));
 
     const isWeekend = (date) => {
@@ -257,8 +280,8 @@ router.get('/excel', auth, isManager, async (req, res) => {
             } else {
               const response = Array.isArray(dayData)
                 ? dayData.find(
-                    (r) => r && r.question && r.question._id && r.question._id.toString() === question._id.toString()
-                  )
+                  (r) => r && r.question && r.question._id && r.question._id.toString() === question._id.toString()
+                )
                 : null;
               row[dateStr] = response?.answer || '';
             }
@@ -272,13 +295,9 @@ router.get('/excel', auth, isManager, async (req, res) => {
             const cell = addedRow.getCell(headers.indexOf(dateStr) + 1);
 
             if (userLeaveDates[dateStr]) {
-              cell.font = { color: { argb: 'FFFF0000' }, bold: true };
+              cell.font = { color: { argb: 'FFFF0000' } };
               cell.alignment = { vertical: 'middle', horizontal: 'center' };
-              cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: isWeekend(date) ? 'FFD3D3D3' : 'FFFFE6E6' },
-              };
+           
             } else {
               applyCellColor(cell, cell.value, date);
             }
@@ -300,13 +319,9 @@ router.get('/excel', auth, isManager, async (req, res) => {
                 worksheet.mergeCells(startRow, colIndex, endRow, colIndex);
                 const mergedCell = worksheet.getCell(startRow, colIndex);
                 mergedCell.value = userLeaveDates[dateStr];
-                mergedCell.font = { color: { argb: 'FFFF0000' }, bold: true };
+                mergedCell.font = { color: { argb: 'FFFF0000' }};
                 mergedCell.alignment = { vertical: 'middle', horizontal: 'center' };
-                mergedCell.fill = {
-                  type: 'pattern',
-                  pattern: 'solid',
-                  fgColor: { argb: isWeekend(date) ? 'FFD3D3D3' : 'FFFFE6E6' },
-                };
+                
               } catch (error) {
                 console.warn(`Error merging cells for leave date ${dateStr}:`, error);
               }

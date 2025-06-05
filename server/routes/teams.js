@@ -249,7 +249,9 @@ router.put('/:id', [
       if (newMembers.length > 0) {
         await User.updateMany(
           { _id: { $in: newMembers } },
-          { $addToSet: { teams: team._id } }
+          { $addToSet: { teams: team._id,
+             projects: team.project._id
+           } }
         );
       }
       
@@ -286,7 +288,7 @@ router.delete('/:id', [auth, isManager], async (req, res) => {
     
     // Check access permissions for managers
     if (req.user.role === 'manager') {
-      const projectManagers = team.project.managers || [];
+      const projectManagers = (team.project && team.project.managers) || [];
       const isManager = projectManagers.some(
         manager => manager.toString() === req.user._id.toString()
       );
@@ -302,18 +304,19 @@ router.delete('/:id', [auth, isManager], async (req, res) => {
       { $pull: { teams: team._id } }
     );
     
-    // Remove team from project
-    await Project.findByIdAndUpdate(
-      team.project._id,
-      { $pull: { teams: team._id } }
-    );
+    // Remove team from project if team has a project
+    if (team.project && team.project._id) {
+      await Project.findByIdAndUpdate(
+        team.project._id,
+        { $pull: { teams: team._id } }
+      );
+    }
     
     await team.deleteOne();
     
     res.json({ message: 'Team removed' });
   } catch (err) {
     console.error(err.message);
-    // Fixed: Return JSON response instead of plain text
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });

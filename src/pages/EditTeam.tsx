@@ -217,7 +217,7 @@ const EditTeam = () => {
             />
           </div>
 
-          <div className="mt-4">
+          {/* <div className="mt-4">
             <div className="flex items-center">
               <input
                 id="active"
@@ -230,7 +230,7 @@ const EditTeam = () => {
                 Active team
               </label>
             </div>
-          </div>
+          </div> */}
         </div>
 
         <div className="bg-white shadow-sm rounded-lg p-6">

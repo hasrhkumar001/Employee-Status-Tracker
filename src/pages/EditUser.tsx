@@ -172,19 +172,21 @@ const EditUser: React.FC = () => {
         </div>
 
         {/* Teams */}
-        <div>
-          <label className="block text-gray-700 font-medium mb-1">Teams</label>
-          <Select
-            isMulti
-            name="teams"
-            options={allTeams}
-            value={allTeams.filter((team) => formData.teams.includes(team.value))}
-            onChange={handleTeamChange}
-            className="react-select-container"
-            classNamePrefix="react-select"
-            isDisabled={loading}
-          />
-        </div>
+        {formData.role !== 'admin' && (
+          <div>
+            <label className="block text-gray-700 font-medium mb-1">Teams</label>
+            <Select
+              isMulti
+              name="teams"
+              options={allTeams}
+              value={allTeams.filter((team) => formData.teams.includes(team.value))}
+              onChange={handleTeamChange}
+              className="react-select-container"
+              classNamePrefix="react-select"
+              isDisabled={loading}
+            />
+          </div>
+        )}
 
         {/* Submit */}
         <button

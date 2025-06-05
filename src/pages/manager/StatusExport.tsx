@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Filter, AlertCircle } from 'lucide-react';
+import { Download, Filter, AlertCircle, Clock, CheckCircle, UserX } from 'lucide-react';
 import axios from 'axios';
+import { param } from 'express-validator';
 
 interface ExportFilters {
   user?: string;
@@ -23,17 +24,22 @@ interface User {
   role?: string;
 }
 
+interface Question {
+  _id: string;
+  text: string;
+}
+
 interface StatusUpdate {
   _id: string;
   user: {
     _id: string;
     name: string;
     email: string;
-  };
+  } | null;
   team: {
     _id: string;
     name: string;
-  };
+  } | null;
   date: string;
   isLeave: boolean;
   leaveReason?: string;
@@ -41,10 +47,95 @@ interface StatusUpdate {
     question: {
       _id: string;
       text: string;
-    };
+    } | null;
     answer: string;
   }[];
 }
+
+const PreviewTable = ({ statuses, questions }: { statuses: StatusUpdate[], questions: Question[] }) => {
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString();
+  };
+
+  const getAnswerForQuestion = (status: StatusUpdate, questionId: string) => {
+    if (status.isLeave) return null;
+    const response = status.responses?.find(r => r.question?._id === questionId);
+    return response ? response.answer : '';
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10">
+              Date & Time
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-28 bg-gray-50 z-10">
+              Team
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-40 bg-gray-50 z-10">
+              User
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Status
+            </th>
+            {questions.map((question) => (
+              <th key={question._id} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-48">
+                {question.text}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {statuses.map((status, index) => (
+            <tr key={status._id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+              <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-inherit z-10">
+                <div className="flex items-center">
+                  <Clock size={14} className="mr-2 text-gray-400" />
+                  {formatDate(status.date)}
+                </div>
+              </td>
+              <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 sticky left-28 bg-inherit z-10">
+                {status.team?.name || 'Unknown Team'}
+              </td>
+              <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 sticky left-40 bg-inherit z-10">
+                {status.user?.name || 'Unknown User'}
+              </td>
+              <td className="px-4 py-4 whitespace-nowrap">
+                {status.isLeave ? (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                    <UserX size={12} className="mr-1" />
+                    On Leave
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <CheckCircle size={12} className="mr-1" />
+                    Active
+                  </span>
+                )}
+              </td>
+              {questions.map((question) => (
+                <td key={question._id} className="px-4 py-4 text-sm text-gray-900 max-w-xs">
+                  <div className="break-words">
+                    {status.isLeave ? (
+                      <span className="text-gray-400 italic">N/A (On Leave)</span>
+                    ) : (
+                      getAnswerForQuestion(status, question._id) || (
+                        <span className="text-gray-400 italic">No response</span>
+                      )
+                    )}
+                  </div>
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 const StatusExport: React.FC = () => {
   const [filters, setFilters] = useState<ExportFilters>({});
@@ -54,7 +145,93 @@ const StatusExport: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [previewData, setPreviewData] = useState<StatusUpdate[]>([]);
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const recordsPerPage = 10; // Changed from 5 to 10
+
+  // Preview Table Component
+  const indexOfLastRecord = currentPage * recordsPerPage;
+  const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
+  const currentRecords = previewData.slice(indexOfFirstRecord, indexOfLastRecord);
+
+  const totalPages = Math.ceil(previewData.length / recordsPerPage);
+
+  // Enhanced pagination function
+  const renderPaginationNumbers = () => {
+    const pageNumbers = [];
+    const maxVisiblePages = 5;
+    
+    if (totalPages <= maxVisiblePages) {
+      // Show all pages if total pages is less than or equal to maxVisiblePages
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i);
+      }
+    } else {
+      let startPage, endPage;
+      
+      if (currentPage <= 3) {
+        // Show first 4 pages + ellipsis + last page
+        startPage = 1;
+        endPage = 4;
+      } else if (currentPage >= totalPages - 2) {
+        // Show first page + ellipsis + last 4 pages
+        startPage = totalPages - 3;
+        endPage = totalPages;
+      } else {
+        // Show current page with 2 pages on each side
+        startPage = currentPage - 2;
+        endPage = currentPage + 2;
+      }
+      
+      // Add first page if not already included
+      if (startPage > 1) {
+        pageNumbers.push(1);
+        if (startPage > 2) {
+          pageNumbers.push('...');
+        }
+      }
+      
+      // Add the range of pages
+      for (let i = startPage; i <= endPage; i++) {
+        if (i > 0 && i <= totalPages) {
+          pageNumbers.push(i);
+        }
+      }
+      
+      // Add last page if not already included
+      if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+          pageNumbers.push('...');
+        }
+        pageNumbers.push(totalPages);
+      }
+    }
+    
+    return pageNumbers.map((pageNum, index) => {
+      if (pageNum === '...') {
+        return (
+          <span key={`ellipsis-${index}`} className="px-3 py-1 text-gray-500">
+            ...
+          </span>
+        );
+      }
+      
+      return (
+        <button
+          key={pageNum}
+          onClick={() => setCurrentPage(pageNum)}
+          className={`px-3 py-1 border rounded transition-colors ${
+            currentPage === pageNum 
+              ? 'bg-blue-500 text-white border-blue-500' 
+              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          {pageNum}
+        </button>
+      );
+    });
+  };
 
   useEffect(() => {
     const fetchDropdownData = async () => {
@@ -128,6 +305,7 @@ const StatusExport: React.FC = () => {
       team: teamId || undefined,
       user: undefined, // Reset user filter when team changes
     });
+    setCurrentPage(1); // Reset to first page when filter changes
     setExportError(null);
   };
 
@@ -135,14 +313,15 @@ const StatusExport: React.FC = () => {
     const params: any = {};
 
     if (filters.team) {
-      params.team = filters.team;
+      params.teams = filters.team;
     } else if (teams.length > 0) {
       params.teams = teams.map((team) => team._id).join(',');
     }
 
     if (filters.user) {
       params.user = filters.user;
-    } else if (filters.team) {
+    }
+     else if (filters.team) {
       const filteredUsers = getFilteredUsers();
       if (filteredUsers.length > 0) {
         params.users = filteredUsers.map((user) => user._id).join(',');
@@ -151,12 +330,19 @@ const StatusExport: React.FC = () => {
 
     if (filters.month) {
       const [year, month] = filters.month.split('-');
-      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-      const endDate = new Date(parseInt(year), parseInt(month), 0);
+      const startDate = new Date(parseInt(year), parseInt(month) - 1, 2);
+      const endDate = new Date(parseInt(year), parseInt(month), 1);
       params.startDate = startDate.toISOString().split('T')[0];
       params.endDate = endDate.toISOString().split('T')[0];
+
     } else if (filters.startDate && filters.endDate) {
       params.startDate = filters.startDate;
+      params.endDate = filters.endDate;
+    }
+    else if(filters.startDate){
+      params.startDate = filters.startDate;
+    }
+    else if(filters.endDate){
       params.endDate = filters.endDate;
     }
 
@@ -175,9 +361,39 @@ const StatusExport: React.FC = () => {
           params,
         });
 
-        setPreviewData(response.data);
+        const statusesData = response.data;
+        
+        // Filter out any invalid status entries
+        const validStatuses = statusesData.filter((status: StatusUpdate) => {
+          if (!status || !status._id) {
+            console.warn('Invalid status entry found:', status);
+            return false;
+          }
+          return true;
+        });
+
+        setPreviewData(validStatuses);
+        setCurrentPage(1); // Reset to first page when data changes
+
+        // Extract unique questions from all statuses
+        const uniqueQuestions: Question[] = [];
+        const questionMap = new Map();
+
+        validStatuses.forEach((status: StatusUpdate) => {
+          if (status.responses && Array.isArray(status.responses)) {
+            status.responses.forEach(response => {
+              if (response.question && response.question._id && !questionMap.has(response.question._id)) {
+                questionMap.set(response.question._id, response.question);
+                uniqueQuestions.push(response.question);
+              }
+            });
+          }
+        });
+
+        setQuestions(uniqueQuestions);
       } catch (err: any) {
         console.error('Error fetching preview data:', err);
+        setError(`Error fetching preview data: ${err.response?.data?.message || err.message}`);
       }
     };
 
@@ -281,37 +497,8 @@ const StatusExport: React.FC = () => {
 
   const clearFilters = () => {
     setFilters({});
+    setCurrentPage(1); // Reset to first page when clearing filters
     setExportError(null);
-  };
-
-  const renderStatusContent = (update: StatusUpdate) => {
-    if (update.isLeave) {
-      return (
-        <div className="bg-orange-50 px-3 py-2 rounded-md">
-          <div className="flex items-center">
-            <span className="text-orange-600 font-medium">On Leave</span>
-            {update.leaveReason && (
-              <span className="ml-2 text-orange-800">({update.leaveReason})</span>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    if (update.responses && update.responses.length > 0) {
-      return (
-        <div className="space-y-2">
-          {update.responses.map((response, idx) => (
-            <div key={idx}>
-              <div className="font-medium text-gray-700 text-sm">{response.question?.text}</div>
-              <div className="text-gray-600 text-sm">{response.answer}</div>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    return <span className="text-gray-400 italic">No data</span>;
   };
 
   if (dataLoading) {
@@ -373,9 +560,10 @@ const StatusExport: React.FC = () => {
                   name="user"
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   value={filters.user || ''}
-                  onChange={(e) =>
-                    setFilters({ ...filters, user: e.target.value || undefined })
-                  }
+                  onChange={(e) => {
+                    setFilters({ ...filters, user: e.target.value || undefined });
+                    setCurrentPage(1); // Reset to first page when filter changes
+                  }}
                 >
                   <option value="">
                     {filters.team
@@ -506,64 +694,35 @@ const StatusExport: React.FC = () => {
         </h2>
 
         {previewData.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Team
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    User
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Content
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {previewData.slice(0, 10).map((update) => (
-                  <tr key={update._id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {update.team?.name || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {update.user.name}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(update.date).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {update.isLeave ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                          Leave
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Active
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {renderStatusContent(update)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {previewData.length > 10 && (
+          <>
+            <PreviewTable statuses={currentRecords} questions={questions} />
+            {previewData.length > recordsPerPage && (
               <div className="mt-4 text-sm text-gray-500 text-center">
-                Showing first 10 records. Export will include all {previewData.length} records.
+                Showing {indexOfFirstRecord + 1}-{Math.min(indexOfLastRecord, previewData.length)} of {previewData.length} records. Export will include all records.
               </div>
             )}
-          </div>
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center mt-4 space-x-2">
+                <button
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border rounded bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+
+                {renderPaginationNumbers()}
+
+                <button
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 border rounded bg-white text-gray-700 border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
         ) : (
           <div className="text-center py-8 text-gray-500">
             {teams.length > 0 && users.length > 0

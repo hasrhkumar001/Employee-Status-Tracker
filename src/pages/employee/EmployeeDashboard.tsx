@@ -31,6 +31,119 @@ interface StatusUpdate {
   leaveReason?: string;
 }
 
+// Status Updates Table Component
+const StatusUpdatesTable: React.FC<{ recentUpdates: StatusUpdate[] }> = ({ recentUpdates }) => {
+  // Get all unique questions across all updates
+  const getAllUniqueQuestions = () => {
+    const questionsMap = new Map();
+    
+    recentUpdates.forEach(update => {
+      if (!update.isLeave && update.responses) {
+        update.responses.forEach(response => {
+          if (response.question) {
+            questionsMap.set(response.question._id, response.question.text);
+          }
+        });
+      }
+    });
+    
+    return Array.from(questionsMap.entries()).map(([id, text]) => ({ id, text }));
+  };
+
+  const uniqueQuestions = getAllUniqueQuestions();
+
+  // Function to get answer for a specific question in an update
+  const getAnswerForQuestion = (update: StatusUpdate, questionId: string) => {
+    if (update.isLeave) return null;
+    
+    const response = update.responses?.find(r => r.question?._id === questionId);
+    return response ? response.answer : '';
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString() ;
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10">
+              Date & Time
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-28 bg-gray-50 z-10">
+              Team
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Status
+            </th>
+            {uniqueQuestions.map(question => (
+              <th key={question.id} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-48">
+                {question.text}
+              </th>
+            ))}
+            {/* <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Leave Reason
+            </th> */}
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {recentUpdates.map((update, index) => (
+            <tr key={update._id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+              <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 sticky left-0 bg-inherit z-10">
+                <div className="flex items-center">
+                  <Clock size={14} className="mr-2 text-gray-400" />
+                  {formatDate(update.date)}
+                </div>
+              </td>
+              <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900 sticky left-28 bg-inherit z-10">
+                {update.team?.name || 'Unknown Team'}
+              </td>
+              <td className="px-4 py-4 whitespace-nowrap">
+                {update.isLeave ? (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                    <UserX size={12} className="mr-1" />
+                    On Leave
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <CheckCircle size={12} className="mr-1" />
+                    Active
+                  </span>
+                )}
+              </td>
+              {uniqueQuestions.map(question => (
+                <td key={question.id} className="px-4 py-4 text-sm text-gray-900 max-w-xs">
+                  <div className="break-words">
+                    {update.isLeave ? (
+                      <span className="text-gray-400 italic">N/A (On Leave)</span>
+                    ) : (
+                      getAnswerForQuestion(update, question.id) || (
+                        <span className="text-gray-400 italic">No response</span>
+                      )
+                    )}
+                  </div>
+                </td>
+              ))}
+              {/* <td className="px-4 py-4 text-sm text-gray-900">
+                {update.isLeave ? (
+                  <div className="text-orange-700">
+                    {update.leaveReason || 'No reason provided'}
+                  </div>
+                ) : (
+                  <span className="text-gray-400">-</span>
+                )}
+              </td> */}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 const EmployeeDashboard: React.FC = () => {
   const { user } = useContext(AuthContext);
   const [currentUser, setCurrentUser] = useState<any>(user);
@@ -166,7 +279,7 @@ const EmployeeDashboard: React.FC = () => {
       }
     } else {
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
           <AlertCircle size={12} className="mr-1" />
           No Update Today
         </span>
@@ -250,66 +363,29 @@ const EmployeeDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Recent Updates */}
+      {/* Recent Updates - Table Format */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Recent Status Updates</h2>
+        <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+          {/* <Calendar className="mr-2" size={20} /> */}
+          Recent Status Updates 
+        </h2>
+        
         {recentUpdates.length > 0 ? (
-          <div className="space-y-6">
-            {recentUpdates.slice(0, 5).map(update => (
-              <div key={update._id} className={`border-l-4 pl-4 py-1 ${
-                update.isLeave ? 'border-orange-500' : 'border-blue-500'
-              }`}>
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <h3 className="font-medium text-gray-900 flex items-center">
-                      {update.team?.name}
-                      {update.isLeave && (
-                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
-                          <UserX size={12} className="mr-1" />
-                          Leave
-                        </span>
-                      )}
-                    </h3>
-                    <p className="text-sm text-gray-500 flex items-center">
-                      <Clock size={14} className="mr-1" />
-                      {new Date(update.date).toLocaleDateString()} at {new Date(update.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </p>
-                  </div>
-                </div>
-                
-                {update.isLeave ? (
-                  <div className="mt-2 p-3 bg-orange-50 rounded-md">
-                    <p className="text-sm font-medium text-orange-900">Leave Reason:</p>
-                    <p className="text-sm text-orange-700 mt-1">
-                      {update.leaveReason || 'No reason provided'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="mt-2 space-y-3">
-                    {update.responses && update.responses.length > 0 ? (
-                      update.responses.map((response, index) => (
-                        <div key={index} className="text-sm">
-                          <p className="font-medium text-gray-700">{response.question?.text}</p>
-                          <p className="text-gray-600 mt-1">{response.answer}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-gray-500 italic">No responses recorded</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
+          <>
+            <StatusUpdatesTable recentUpdates={recentUpdates} />
+            <div className="mt-4 text-sm text-gray-500">
+              Showing {recentUpdates.length} recent updates
+            </div>
             <div className="flex justify-end mt-4">
-  <Link
-    to="/employee/status"
-    className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-  >
-    View All Status Updates
-    <ArrowRight size={16} className="ml-2" />
-  </Link>
-</div>
-          </div>
+              <Link
+                to="/employee/status"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+              >
+                View All Status Updates
+                <ArrowRight size={16} className="ml-2" />
+              </Link>
+            </div>
+          </>
         ) : (
           <p className="text-gray-500 text-center py-4">No recent status updates.</p>
         )}

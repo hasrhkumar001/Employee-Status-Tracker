@@ -74,8 +74,8 @@ const CreateProject: React.FC = () => {
 
     if (!formData.name.trim()) {
       newErrors.name = 'Project name is required';
-    } else if (formData.name.trim().length < 3) {
-      newErrors.name = 'Project name must be at least 3 characters';
+    } else if (formData.name.trim().length < 2) {
+      newErrors.name = 'Project name must be at least 2 characters';
     }
 
     if (formData.description.trim().length > 500) {

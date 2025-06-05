@@ -4,7 +4,8 @@ import {
   Home, Users, Briefcase, ClipboardList, 
   Settings, X, UserPlus, FileQuestion, 
   FileText, UserCheck, Download, LayoutGrid,
-  LogOut
+  LogOut,
+  HomeIcon
 } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
 
@@ -66,7 +67,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                 }`}
                 onClick={() => setIsOpen(false)}
               >
-                <Settings size={20} className="mr-3" />
+                <HomeIcon size={20} className="mr-3" />
                 <span>Dashboard</span>
               </Link>
               <Link
@@ -125,7 +126,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
                 }`}
                 onClick={() => setIsOpen(false)}
               >
-                <ClipboardList size={20} className="mr-3" />
+                <HomeIcon size={20} className="mr-3" />
                 <span>Dashboard</span>
               </Link>
               <Link
@@ -150,18 +151,30 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen }) => {
             <Link
               to="/employee"
               className={`flex items-center px-4 py-3 mb-2 rounded-md ${
-                isActive('/employee') ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+              isActive('/employee') && !isActive('/employee/status')  ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+              onClick={() => setIsOpen(false)}
+            >
+              <HomeIcon size={20} className="mr-3" />
+              <span>Dashboard</span>
+            </Link>
+
+            <Link
+              to="/employee/status"
+              className={`flex items-center px-4 py-3 mb-2 rounded-md ${
+                location.pathname === '/employee/status' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
               }`}
               onClick={() => setIsOpen(false)}
             >
               <FileText size={20} className="mr-3" />
               <span>My Status</span>
             </Link>
+            
           </div>)}
             <Link
               to="/profile"
               className={`flex items-center px-4 py-3 mb-2 rounded-md ${
-              isActive('/profile/edit') ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+              isActive('/profile') ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
               }`}
               onClick={() => setIsOpen(false)}
             >

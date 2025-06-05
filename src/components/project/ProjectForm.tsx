@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
+import Select from 'react-select';
 
 const ProjectForm = ({ isEdit = false }) => {
   const [formData, setFormData] = useState({ name: '', description: '', managers: [] });
@@ -26,7 +27,16 @@ const ProjectForm = ({ isEdit = false }) => {
         .get(`/api/projects/${id}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
-        .then((res) => setFormData(res.data))
+        .then((res) => {
+          const project = res.data;
+          setFormData({
+            ...project,
+            managers: project.managers.map((m) => ({
+              value: m._id || m,
+              label: m.name || m,
+            })),
+          });
+        })
         .catch((err) => console.error(err));
     }
   }, [id, isEdit]);
@@ -35,13 +45,18 @@ const ProjectForm = ({ isEdit = false }) => {
     e.preventDefault();
     const token = localStorage.getItem('token');
     try {
+      const payload = {
+        ...formData,
+        managers: formData.managers.map((manager) => manager.value),
+      };
+
       if (isEdit) {
-        await axios.put(`/api/projects/${id}`, formData, {
+        await axios.put(`/api/projects/${id}`, payload, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setAlert('Project updated!');
       } else {
-        await axios.post('/api/projects', formData, {
+        await axios.post('/api/projects', payload, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setAlert('Project created!');
@@ -52,6 +67,11 @@ const ProjectForm = ({ isEdit = false }) => {
       setAlert('An error occurred.');
     }
   };
+
+  const managerOptions = users.map((user) => ({
+    value: user._id,
+    label: `${user.name} (${user.email})`,
+  }));
 
   return (
     <div className="max-w-xl mx-auto mt-8 p-6 bg-white rounded-xl shadow-md">
@@ -77,23 +97,12 @@ const ProjectForm = ({ isEdit = false }) => {
         ></textarea>
 
         <label className="block text-sm font-medium">Assign Managers:</label>
-        <select
-          multiple
+        <Select
+          options={managerOptions}
           value={formData.managers}
-          onChange={(e) =>
-            setFormData({
-              ...formData,
-              managers: Array.from(e.target.selectedOptions, (option) => option.value),
-            })
-          }
-          className="w-full border rounded px-3 py-2"
-        >
-          {users.map((user) => (
-            <option key={user._id} value={user._id}>
-              {user.name} ({user.email})
-            </option>
-          ))}
-        </select>
+          isMulti
+          onChange={(selectedOptions) => setFormData({ ...formData, managers: selectedOptions })}
+        />
 
         <button
           type="submit"

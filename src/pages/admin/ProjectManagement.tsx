@@ -142,7 +142,7 @@ const ProjectManagement: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow-sm border">
+      {/* <div className="bg-white p-4 rounded-lg shadow-sm border">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
             <div className="relative">
@@ -169,7 +169,7 @@ const ProjectManagement: React.FC = () => {
             </select>
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Projects Table */}
       <div className="bg-white shadow-sm rounded-lg border">
@@ -206,9 +206,9 @@ const ProjectManagement: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Teams
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
-                  </th>
+                  </th> */}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Created
                   </th>
@@ -272,7 +272,7 @@ const ProjectManagement: React.FC = () => {
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    {/* <td className="px-6 py-4 whitespace-nowrap">
                       <button
                         onClick={() => handleStatusToggle(project._id, project.active)}
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
@@ -283,7 +283,7 @@ const ProjectManagement: React.FC = () => {
                       >
                         {project.active ? 'Active' : 'Inactive'}
                       </button>
-                    </td>
+                    </td> */}
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div>{new Date(project.createdAt).toLocaleDateString()}</div>
                       {project.updatedAt && project.updatedAt !== project.createdAt && (
@@ -308,13 +308,13 @@ const ProjectManagement: React.FC = () => {
                         >
                           <Edit size={18} />
                         </Link>
-                        <button
+                        {/* <button
                           onClick={() => handleDelete(project._id, project.name)}
                           className="text-red-600 hover:text-red-900 p-1 rounded transition-colors"
                           title="Delete Project"
                         >
                           <Trash2 size={18} />
-                        </button>
+                        </button> */}
                       </div>
                     </td>
                   </tr>
